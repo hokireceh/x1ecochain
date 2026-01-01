@@ -12,10 +12,11 @@ function escapeMarkdown(text) {
   return text.replace(/[_*`\[]/g, '\\$&');
 }
 
-function formatProfile(data) {
+function formatProfile(data, balanceData) {
   let text = `👤 *Your Profile*
 
 💼 *Wallet:* \`${data.address.slice(0, 6)}...${data.address.slice(-4)}\`
+💰 *Balance:* ${balanceData.success ? parseFloat(balanceData.balance).toFixed(4) : 'Error'} X1T
 ⭐ *Points:* ${data.points}
 🏆 *Rank:* #${data.rank}\n`;
 
@@ -181,9 +182,13 @@ Select an option:`;
     case 'profile':
       try {
         await ctx.editMessageText('⏳ Loading profile...', { parse_mode: 'Markdown' });
-        const profileResult = await api.getUserInfo();
+        const [profileResult, balanceResult] = await Promise.all([
+          api.getUserInfo(),
+          api.getBalance()
+        ]);
+        
         if (profileResult.success) {
-          await ctx.editMessageText(formatProfile(profileResult.data), {
+          await ctx.editMessageText(formatProfile(profileResult.data, balanceResult), {
             parse_mode: 'Markdown',
             ...keyboards.backButton
           });
