@@ -7,6 +7,11 @@ function isAllowed(userId) {
   return config.telegram.allowedUsers.includes(userId);
 }
 
+function escapeMarkdown(text) {
+  if (!text) return '';
+  return text.replace(/[_*`\[]/g, '\\$&');
+}
+
 function formatProfile(data) {
   let text = `👤 *Your Profile*
 
@@ -18,7 +23,7 @@ function formatProfile(data) {
     text += `\n🔗 *Linked Accounts:*\n`;
     data.linked_accounts.forEach(acc => {
       const icon = acc.accountType === 'x' ? '𝕏' : acc.accountType === 'discord' ? '💬' : '🔗';
-      text += `${icon} ${acc.accountType.toUpperCase()}: @${acc.accountUserName}\n`;
+      text += `${icon} ${acc.accountType.toUpperCase()}: @${escapeMarkdown(acc.accountUserName)}\n`;
     });
   }
 
@@ -39,8 +44,8 @@ function formatQuests(quests) {
     
     const categoryIcon = q.category === 'social' ? '🌐' : (q.category === 'onchain' ? '⛓️' : '📌');
     
-    text += `${status} *${q.title}*\n`;
-    text += `   ${categoryIcon} ${q.category} | ${period} ${q.periodicity}\n`;
+    text += `${status} *${escapeMarkdown(q.title)}*\n`;
+    text += `   ${categoryIcon} ${escapeMarkdown(q.category)} | ${period} ${escapeMarkdown(q.periodicity)}\n`;
     text += `   💰 ${q.reward} pts | Completed: ${q.total_completions}\n\n`;
   });
   
@@ -58,10 +63,10 @@ function formatDailyQuests(quests) {
     const status = q.is_completed_today ? '✅ Done' : '⏳ Pending';
     if (q.is_completed_today) completedCount++;
     
-    text += `${status} *${q.title}*\n`;
+    text += `${status} *${escapeMarkdown(q.title)}*\n`;
     text += `   💰 ${q.reward} pts\n`;
     if (q.call_to_action && q.call_to_action !== 'faucet' && q.call_to_action !== 'transfer') {
-      text += `   🔗 ${q.call_to_action.slice(0, 40)}\n`;
+      text += `   🔗 ${escapeMarkdown(q.call_to_action.slice(0, 40))}\n`;
     }
     text += '\n';
   });
@@ -78,13 +83,13 @@ function formatAutoResults(results) {
   
   results.forEach(r => {
     if (r.skipped) {
-      text += `☑️ *${r.title}*\n   Already completed\n\n`;
+      text += `☑️ *${escapeMarkdown(r.title)}*\n   Already completed\n\n`;
     } else if (r.success) {
-      text += `✅ *${r.title}*\n   +${r.reward} pts earned!\n\n`;
+      text += `✅ *${escapeMarkdown(r.title)}*\n   +${r.reward} pts earned!\n\n`;
       totalRewards += r.reward;
       successCount++;
     } else {
-      text += `❌ *${r.title}*\n   ${r.error || 'Failed'}\n\n`;
+      text += `❌ *${escapeMarkdown(r.title)}*\n   ${escapeMarkdown(r.error || 'Failed')}\n\n`;
       failCount++;
     }
   });
@@ -322,7 +327,7 @@ Proceed?`;
         const socialResult = await api.getSocialQuests();
         if (socialResult.success && socialResult.data.length > 0) {
           const text = '🌐 *Pending Social Quests*\n\n' + socialResult.data.map(q => 
-            `✨ *${q.title}*\n   💰 ${q.reward} pts | Type: ${q.type}\n`
+            `✨ *${escapeMarkdown(q.title)}*\n   💰 ${q.reward} pts | Type: ${escapeMarkdown(q.type)}\n`
           ).join('\n');
           await ctx.editMessageText(text, {
             parse_mode: 'Markdown',
