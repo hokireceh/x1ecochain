@@ -384,7 +384,6 @@ Proceed?`;
       }
       break;
       
-    case 'send_x1t':
     case 'transfer':
       try {
         await ctx.editMessageText('⏳ Loading balance...', { parse_mode: 'Markdown' });

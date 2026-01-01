@@ -14,8 +14,7 @@ const mainMenu = {
         { text: '🔗 DC Faucet', callback_data: 'dc_faucet' }
       ],
       [
-        { text: '💸 Send X1T', callback_data: 'send_x1t' },
-        { text: '📤 Transfer', callback_data: 'transfer' }
+        { text: '💸 Send X1T', callback_data: 'transfer' }
       ],
       [
         { text: '🚀 Auto Daily', callback_data: 'auto_daily' },
