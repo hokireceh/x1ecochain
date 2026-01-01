@@ -45,11 +45,15 @@ async function generateSignature(privateKey) {
   try {
     const wallet = new ethers.Wallet(privateKey);
     
-    // ✅ MESSAGE YANG BENAR (sesuai dengan yang di-sign di browser)
-    const message = 'X1 Testnet Auth';
+    // ✅ MESSAGE YANG BENAR (Sesuai Hex User)
+    // Hex: 0x583120417574684d6573736167652c204164647265737320...
+    // String: "X1 AuthMessage, Address 0xbE0bff0121f17EE0EC1F08976f936d714202face"
+    const message = `X1 AuthMessage, Address ${wallet.address}`;
     
     console.log('🔐 Signing with wallet:', wallet.address);
+    console.log('📝 Message:', message);
     
+    // ✅ Gunakan signMessage (Personal Sign)
     const signature = await wallet.signMessage(message);
     
     return { signature, message, address: wallet.address };
@@ -65,9 +69,49 @@ async function generateToken(privateKey) {
     
     console.log('📤 Requesting token from API...');
     
+    // ✅ 1. GET Handshake (Sesuai log user - Handshake ke /signin?address=...)
+    try {
+      await axios.get(`${API_BASE_URL}/signin`, {
+        params: { address: address },
+        headers: {
+          'Origin': 'https://testnet.x1ecochain.com',
+          'Referer': 'https://testnet.x1ecochain.com/',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+          'Accept': '*/*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'sec-ch-ua': '"Brave";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"Windows"',
+          'sec-fetch-dest': 'empty',
+          'sec-fetch-mode': 'cors',
+          'sec-fetch-site': 'cross-site',
+          'sec-gpc': '1'
+        }
+      });
+      console.log('✅ GET /signin handshake successful');
+    } catch (e) {
+      console.warn('⚠️ GET /signin handshake info:', e.message);
+    }
+    
+    // ✅ 2. POST Sign-in dengan signature dan full browser headers
     const response = await axios.post(`${API_BASE_URL}/signin`, 
       { signature },
-      { headers: { 'Content-Type': 'application/json' } }
+      { 
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': '*/*',
+          'Origin': 'https://testnet.x1ecochain.com',
+          'Referer': 'https://testnet.x1ecochain.com/',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+          'sec-ch-ua': '"Brave";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"Windows"',
+          'sec-fetch-dest': 'empty',
+          'sec-fetch-mode': 'cors',
+          'sec-fetch-site': 'cross-site',
+          'sec-gpc': '1'
+        } 
+      }
     );
     
     if (response.data?.token) {
