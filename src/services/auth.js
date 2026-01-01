@@ -45,10 +45,9 @@ async function generateSignature(privateKey) {
   try {
     const wallet = new ethers.Wallet(privateKey);
     
-    // ✅ MESSAGE YANG BENAR (Sesuai Hex User)
-    // Hex: 0x583120417574684d6573736167652c204164647265737320...
-    // String: "X1 AuthMessage, Address 0xbE0bff0121f17EE0EC1F08976f936d714202face"
-    const message = `X1 AuthMessage, Address ${wallet.address}`;
+    // ✅ MESSAGE YANG BENAR (Sesuai log user - Address harus LOWERCASE)
+    // Berdasarkan file: {"message":"X1 AuthMessage, Address 0xbe0bff0121f17ee0ec1f08976f936d714202face"}
+    const message = `X1 AuthMessage, Address ${wallet.address.toLowerCase()}`;
     
     console.log('🔐 Signing with wallet:', wallet.address);
     console.log('📝 Message:', message);
@@ -69,7 +68,7 @@ async function generateToken(privateKey) {
     
     console.log('📤 Requesting token from API...');
     
-    // ✅ 1. GET Handshake (Sesuai log user - Handshake ke /signin?address=...)
+    // ✅ 1. GET Handshake (Sesuai log user)
     try {
       await axios.get(`${API_BASE_URL}/signin`, {
         params: { address: address },
@@ -93,9 +92,13 @@ async function generateToken(privateKey) {
       console.warn('⚠️ GET /signin handshake info:', e.message);
     }
     
-    // ✅ 2. POST Sign-in dengan signature dan full browser headers
+    // ✅ 2. POST Sign-in (Payload lengkap sesuai log user)
     const response = await axios.post(`${API_BASE_URL}/signin`, 
-      { signature },
+      { 
+        signature,
+        address: address,
+        ref_code: "" 
+      },
       { 
         headers: { 
           'Content-Type': 'application/json',
