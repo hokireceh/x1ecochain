@@ -435,5 +435,6 @@ module.exports = {
   getSocialQuests,
   completeSocialQuests,
   sendTransfer,
-  getBalance
+  getBalance,
+  httpsAgent
 };

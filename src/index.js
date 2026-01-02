@@ -26,6 +26,7 @@ async function initBot() {
     global.x1AuthToken = token;
     
     const api = require('./services/api');
+    const { httpsAgent } = require('./services/api');
     const userInfo = await api.getUserInfo();
     
     // Debug: Print FULL response
@@ -52,8 +53,13 @@ async function initBot() {
       process.exit(1);
     }
     
-    // ✅ Initialize Telegraf
-    const bot = new Telegraf(config.telegram.token);
+    // ✅ Initialize Telegraf with custom agent if needed
+    const bot = new Telegraf(config.telegram.token, {
+      handlerTimeout: 90000, // 90 seconds
+      telegram: {
+        agent: httpsAgent // Use the same keep-alive agent
+      }
+    });
     
     console.log('🤖 X1 EcoChain Bot started (Telegraf)!');
     console.log('Allowed users:', config.telegram.allowedUsers.length > 0 ? config.telegram.allowedUsers : 'All users');
