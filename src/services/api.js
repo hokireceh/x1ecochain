@@ -8,12 +8,12 @@ const https = require('https');
 dns.setDefaultResultOrder('ipv4first');
 
 // HTTPS Keep-Alive Agent
-    const httpsAgent = new https.Agent({
-      keepAlive: true,
-      keepAliveMsecs: 1000,
-      maxSockets: 100,
-      timeout: 60000
-    });
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 1000,
+  maxSockets: 100,
+  timeout: 30000 // Timeout 30 detik untuk API requests sesuai permintaan
+});
 
 // Toggle between axios and cloudscraper
 const USE_CLOUDSCRAPER = process.env.USE_CLOUDSCRAPER === 'true' || false;
