@@ -66,7 +66,7 @@ async function initBot() {
     // Launch with improved polling
     bot.launch({
       polling: {
-        timeout: 30,
+        timeout: 60,
         limit: 100,
         allowedUpdates: ['message', 'callback_query']
       }
