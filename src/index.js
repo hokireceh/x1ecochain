@@ -55,9 +55,10 @@ async function initBot() {
     
     // ✅ Initialize Telegraf with custom agent if needed
     const bot = new Telegraf(config.telegram.token, {
-      handlerTimeout: 90000, // 90 seconds
+      handlerTimeout: 120000, // Increase to 120 seconds
       telegram: {
-        agent: httpsAgent // Use the same keep-alive agent
+        agent: httpsAgent, // Use the same keep-alive agent
+        apiRoot: 'https://api.telegram.org'
       }
     });
     

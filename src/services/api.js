@@ -119,8 +119,12 @@ function formatError(error) {
     return '❌ Too many requests. Please wait a moment before trying again.';
   }
 
+  if (error?.response?.status === 500 && error?.response?.data?.includes?.('claim once every 24 hours')) {
+    return '❌ You can only claim faucet once every 24 hours. Please try again later.';
+  }
+
   if (error?.code === 'ETIMEDOUT' || error?.errno === 'ETIMEDOUT') {
-    return '❌ Connection timed out. The server might be busy, please try again.';
+    return '❌ Connection timed out. The server or Telegram is busy, please try again.';
   }
   
   // Handle AggregateError (multiple errors combined)
