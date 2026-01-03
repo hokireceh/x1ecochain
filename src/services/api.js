@@ -89,7 +89,15 @@ function getFaucetClient() {
             'Authorization': global.x1AuthToken || '',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
           }
-        }).then(body => ({ data: JSON.parse(body) }));
+        }).then(body => {
+          try {
+            return { data: typeof body === 'string' ? JSON.parse(body) : body };
+          } catch (e) {
+            // Handle cases where body is "ok" or other non-JSON success messages
+            if (body === 'ok') return { data: { message: 'Success (ok)' } };
+            return { data: { raw_response: body } };
+          }
+        });
       }
     };
   } else {
@@ -106,6 +114,14 @@ function getFaucetClient() {
 
 function formatError(error) {
   if (typeof error === 'string') return error;
+  
+  if (error?.response?.status === 429 || error?.statusCode === 429) {
+    return '❌ Too many requests. Please wait a moment before trying again.';
+  }
+
+  if (error?.code === 'ETIMEDOUT' || error?.errno === 'ETIMEDOUT') {
+    return '❌ Connection timed out. The server might be busy, please try again.';
+  }
   
   // Handle AggregateError (multiple errors combined)
   if (error?.errors && Array.isArray(error.errors)) {
