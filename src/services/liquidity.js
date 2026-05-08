@@ -209,8 +209,11 @@ async function performDailyLiquidity(liquidityAmountX1T) {
     results.steps.push({ step: 'Approve tokens to PositionManager', success: true });
 
     const deadline = Math.floor(Date.now() / 1000) + 600;
-    const amount0Min = applySlippage(usdtBalWei);
-    const amount1Min = applySlippage(wx1tBalWei);
+    // Set mins to 0 — the pool will use both tokens in proportion to current price.
+    // Applying slippage on the full balance causes reverts because the contract
+    // only deposits the limiting-token amount; the excess token is returned unused.
+    const amount0Min = 0n;
+    const amount1Min = 0n;
 
     // ── Step 7: increaseLiquidity or mint ────────────────────────────────
     const posManager = new ethers.Contract(NFT_POSITION_MANAGER, NFT_PM_ABI, wallet);
