@@ -21,6 +21,9 @@ const mainMenu = {
         { text: '📱 Auto Social', callback_data: 'auto_social' }
       ],
       [
+        { text: '⚡ Run Auto Now', callback_data: 'run_now' }
+      ],
+      [
         { text: '🔄 Refresh', callback_data: 'refresh' }
       ]
     ]
@@ -57,9 +60,21 @@ const confirmAutoSocial = {
   }
 };
 
+const confirmRunNow = {
+  reply_markup: {
+    inline_keyboard: [
+      [
+        { text: '✅ Run Now', callback_data: 'confirm_run_now' },
+        { text: '❌ Cancel', callback_data: 'menu' }
+      ]
+    ]
+  }
+};
+
 module.exports = {
   mainMenu,
   backButton,
   confirmAutoDaily,
-  confirmAutoSocial
+  confirmAutoSocial,
+  confirmRunNow
 };

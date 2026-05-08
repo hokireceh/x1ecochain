@@ -1,6 +1,7 @@
 const api = require('../services/api');
 const keyboards = require('./keyboards');
 const config = require('../config');
+const scheduler = require('../services/scheduler');
 
 function isAllowed(userId) {
   if (config.telegram.allowedUsers.length === 0) return true;
@@ -421,6 +422,35 @@ Or press back to cancel.`;
       }
       break;
       
+    case 'run_now': {
+      const tz = config.scheduler.timezone;
+      const hh = String(config.scheduler.hour).padStart(2, '0');
+      const mm = String(config.scheduler.minute).padStart(2, '0');
+      const statusText = `⚡ *Run Auto Tasks Now*\n\nIni akan langsung jalankan:\n💧 Claim Faucet\n🎯 Complete Daily Quests\n\nBiasanya berjalan otomatis tiap hari pukul *${hh}:${mm} ${tz}*\n\nLanjutkan?`;
+      await ctx.editMessageText(statusText, {
+        parse_mode: 'Markdown',
+        ...keyboards.confirmRunNow
+      });
+      break;
+    }
+
+    case 'confirm_run_now':
+      try {
+        await ctx.editMessageText('⏳ Menjalankan semua tugas harian...', { parse_mode: 'Markdown' });
+        await scheduler.runDailyTasks();
+        await ctx.editMessageText('✅ *Selesai!*\n\nHasil sudah dikirim via notifikasi Telegram.', {
+          parse_mode: 'Markdown',
+          ...keyboards.backButton
+        });
+      } catch (err) {
+        console.error('Run now error:', err.message);
+        await ctx.editMessageText(`❌ Error: ${err.message}`, {
+          parse_mode: 'Markdown',
+          ...keyboards.backButton
+        });
+      }
+      break;
+
     default:
       await ctx.editMessageText('❓ Unknown action', {
         parse_mode: 'Markdown',
