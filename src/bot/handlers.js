@@ -482,7 +482,7 @@ Or press back to cancel.`;
       } catch (err) {
         console.error('Liquidity menu error:', err.message);
         await ctx.editMessageText(`❌ Error: ${safeError(err.message)}`, {
-          parse_mode: 'MarkdownV2',
+          parse_mode: 'Markdown',
           ...keyboards.backButton
         });
       }
@@ -493,27 +493,26 @@ Or press back to cancel.`;
       try {
         const liqAmount = config.scheduler.liquidityAmount;
         await ctx.editMessageText(
-          `⏳ *Menjalankan add liquidity ${liqAmount} X1T\\.\\.\\.*\n\nProses ini mencakup:\n1️⃣ Wrap X1T→WX1T\n2️⃣ Swap ½ WX1T→USDT\n3️⃣ Add ke pool USDT/WX1T\n\nTunggu 1\\-2 menit\\.\\.\\.`,
-          { parse_mode: 'MarkdownV2' }
+          `⏳ *Menjalankan add liquidity ${liqAmount} X1T...*\n\nProses ini mencakup:\n1️⃣ Wrap X1T→WX1T\n2️⃣ Swap 1/2 WX1T→USDT\n3️⃣ Add ke pool USDT/WX1T\n\nTunggu 1-2 menit...`,
+          { parse_mode: 'Markdown' }
         );
         const result = await liquidity.performDailyLiquidity(liqAmount);
         if (result.success) {
-          let text = `✅ *Add Liquidity Selesai\\!*\n\n`;
+          let text = `✅ *Add Liquidity Selesai!*\n\n`;
           text += `💰 *Jumlah:* ${result.liquidityAmount} X1T\n`;
-          if (result.nftTokenId) text += `🪙 *NFT Position:* \\#${result.nftTokenId}\n`;
-          if (result.action === 'mint') text += `🆕 *Posisi baru dibuat\\!*\n`;
+          if (result.nftTokenId) text += `🪙 *NFT Position:* #${result.nftTokenId}\n`;
+          if (result.action === 'mint') text += `🆕 *Posisi baru dibuat!*\n`;
           text += `\n📋 *Detail langkah:*\n`;
           result.steps.forEach(s => {
-            text += `${s.success ? '✅' : '❌'} ${s.step}`;
-            if (s.txHash) text += `\n   \`${s.txHash.slice(0, 16)}\\.\\.\\.\``;
-            if (s.error) text += `\n   ${safeError(s.error)}`;
+            text += `${s.success ? '✅' : '❌'} ${escMd(s.step)}`;
+            if (s.txHash) text += ` — \`${s.txHash.slice(0, 16)}...\``;
             text += '\n';
           });
           if (result.finalBalance) {
             text += `\n💼 *Saldo akhir:* ${parseFloat(result.finalBalance).toFixed(4)} X1T`;
           }
           await ctx.editMessageText(text, {
-            parse_mode: 'MarkdownV2',
+            parse_mode: 'Markdown',
             ...keyboards.backButton
           });
         } else {
@@ -523,11 +522,15 @@ Or press back to cancel.`;
             const done = result.steps.filter(s => s.success);
             if (done.length > 0) text += `\n\n✅ Selesai ${done.length} langkah sebelum error`;
           }
-          await ctx.editMessageText(text, { ...keyboards.backButton });
+          await ctx.editMessageText(text, {
+            parse_mode: 'Markdown',
+            ...keyboards.backButton
+          });
         }
       } catch (err) {
         console.error('Liquidity error:', err.message);
         await ctx.editMessageText(`❌ Error: ${safeError(err.message)}`, {
+          parse_mode: 'Markdown',
           ...keyboards.backButton
         });
       }
