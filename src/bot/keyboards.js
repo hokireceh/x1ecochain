@@ -15,6 +15,9 @@ const mainMenu = {
       ],
       [
         { text: '💱 Daily Swap', callback_data: 'swap' },
+        { text: '🌊 Add Liquidity', callback_data: 'liquidity' }
+      ],
+      [
         { text: '💸 Send X1T', callback_data: 'transfer' }
       ],
       [
@@ -83,11 +86,23 @@ const confirmSwap = {
   }
 };
 
+const confirmLiquidity = {
+  reply_markup: {
+    inline_keyboard: [
+      [
+        { text: '✅ Add Liquidity', callback_data: 'confirm_liquidity' },
+        { text: '❌ Cancel', callback_data: 'menu' }
+      ]
+    ]
+  }
+};
+
 module.exports = {
   mainMenu,
   backButton,
   confirmAutoDaily,
   confirmAutoSocial,
   confirmRunNow,
-  confirmSwap
+  confirmSwap,
+  confirmLiquidity
 };

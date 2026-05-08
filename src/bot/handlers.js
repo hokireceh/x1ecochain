@@ -3,6 +3,7 @@ const keyboards = require('./keyboards');
 const config = require('../config');
 const scheduler = require('../services/scheduler');
 const swap = require('../services/swap');
+const liquidity = require('../services/liquidity');
 
 function isAllowed(userId) {
   if (config.telegram.allowedUsers.length === 0) return true;
@@ -423,6 +424,98 @@ Or press back to cancel.`;
       }
       break;
       
+    case 'liquidity': {
+      try {
+        await ctx.editMessageText('⏳ Memuat info liquidity...', { parse_mode: 'Markdown' });
+        const info = await liquidity.getLiquidityInfo();
+        const liqAmount = config.scheduler.liquidityAmount;
+        const autoLiqStatus = config.scheduler.autoLiquidity ? `✅ ON (${liqAmount} X1T/hari)` : '❌ OFF';
+
+        let text = `🌊 *EcoDex Add Liquidity*\n\n`;
+
+        if (info.success && info.hasPosition) {
+          text += `🪙 *Posisi aktif (NFT #${info.nftTokenId}):*\n`;
+          text += `   USDT: ${parseFloat(info.amountUSDT).toFixed(6)}\n`;
+          text += `   WX1T: ${parseFloat(info.amountWX1T).toFixed(4)}\n`;
+          text += `   💰 Nilai: $${parseFloat(info.positionValueUSD).toFixed(6)}\n`;
+          text += `   📈 APR: ${info.aprPercent}%\n`;
+          text += `   🔵 Status: ${info.positionStatus}\n`;
+          const feeTot = parseFloat(info.feesUSDT) + parseFloat(info.feesWX1T);
+          if (feeTot > 0) text += `   💸 Fee earned: ~$${feeTot.toFixed(8)}\n`;
+          text += '\n';
+        } else if (info.success && !info.hasPosition) {
+          text += `⚠️ *Belum ada posisi aktif.*\nAkan dibuat posisi baru full-range.\n\n`;
+        }
+
+        text += `📊 *Harga WX1T:* ${info.success ? info.priceWX1TinUSDT : 'N/A'} USDT\n`;
+        text += `💼 *Saldo X1T:* ${info.success ? parseFloat(info.x1tBalance).toFixed(4) : 'N/A'}\n\n`;
+        text += `🔄 *Alur:*\n`;
+        text += `X1T → WX1T → ½ swap ke USDT → Add ke pool\n\n`;
+        text += `💰 *Jumlah per hari:* ${liqAmount} X1T\n`;
+        text += `⚙️ *Auto liquidity:* ${autoLiqStatus}\n\n`;
+        text += `Lanjutkan add liquidity sekarang?`;
+
+        await ctx.editMessageText(text, {
+          parse_mode: 'Markdown',
+          ...keyboards.confirmLiquidity
+        });
+      } catch (err) {
+        console.error('Liquidity menu error:', err.message);
+        await ctx.editMessageText(`❌ Error: ${err.message}`, {
+          parse_mode: 'Markdown',
+          ...keyboards.backButton
+        });
+      }
+      break;
+    }
+
+    case 'confirm_liquidity':
+      try {
+        const liqAmount = config.scheduler.liquidityAmount;
+        await ctx.editMessageText(
+          `⏳ *Menjalankan add liquidity ${liqAmount} X1T...*\n\nProses ini mencakup:\n1️⃣ Wrap X1T→WX1T\n2️⃣ Swap ½ WX1T→USDT\n3️⃣ Add ke pool USDT/WX1T\n\nTunggu 1-2 menit...`,
+          { parse_mode: 'Markdown' }
+        );
+        const result = await liquidity.performDailyLiquidity(liqAmount);
+        if (result.success) {
+          let text = `✅ *Add Liquidity Selesai!*\n\n`;
+          text += `💰 *Jumlah:* ${result.liquidityAmount} X1T\n`;
+          if (result.nftTokenId) text += `🪙 *NFT Position:* #${result.nftTokenId}\n`;
+          if (result.action === 'mint') text += `🆕 *Posisi baru dibuat!*\n`;
+          text += `\n📋 *Detail langkah:*\n`;
+          result.steps.forEach(s => {
+            text += `${s.success ? '✅' : '❌'} ${s.step}`;
+            if (s.txHash) text += `\n   \`${s.txHash.slice(0, 16)}...\``;
+            if (s.error) text += `\n   ${s.error}`;
+            text += '\n';
+          });
+          if (result.finalBalance) {
+            text += `\n💼 *Saldo akhir:* ${parseFloat(result.finalBalance).toFixed(4)} X1T`;
+          }
+          await ctx.editMessageText(text, {
+            parse_mode: 'Markdown',
+            ...keyboards.backButton
+          });
+        } else {
+          let text = `❌ *Add Liquidity Gagal*\n\n${result.error}`;
+          if (result.steps?.length > 0) {
+            const done = result.steps.filter(s => s.success);
+            if (done.length > 0) text += `\n\n✅ Selesai ${done.length} langkah sebelum error`;
+          }
+          await ctx.editMessageText(text, {
+            parse_mode: 'Markdown',
+            ...keyboards.backButton
+          });
+        }
+      } catch (err) {
+        console.error('Liquidity error:', err.message);
+        await ctx.editMessageText(`❌ Error: ${err.message}`, {
+          parse_mode: 'Markdown',
+          ...keyboards.backButton
+        });
+      }
+      break;
+
     case 'swap': {
       try {
         await ctx.editMessageText('⏳ Memuat info swap...', { parse_mode: 'Markdown' });

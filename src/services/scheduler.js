@@ -103,7 +103,43 @@ async function runDailyTasks() {
     report += '\n';
   }
 
-  // 3. Daily Swap
+  // 3. Daily Add Liquidity
+  if (config.scheduler.autoLiquidity) {
+    console.log(`🌊 [Scheduler] Running daily add liquidity (${config.scheduler.liquidityAmount} X1T)...`);
+    try {
+      const liq = require('./liquidity');
+      const liqResult = await liq.performDailyLiquidity(config.scheduler.liquidityAmount);
+      if (liqResult.success) {
+        report += `🌊 *Daily Add Liquidity:* ✅ Selesai!\n`;
+        report += `   💰 Jumlah: ${liqResult.liquidityAmount} X1T\n`;
+        liqResult.steps.forEach(s => {
+          report += `   ${s.success ? '✅' : '❌'} ${s.step}`;
+          if (s.txHash) report += ` — \`${s.txHash.slice(0, 10)}...\``;
+          if (s.error) report += ` — ${s.error}`;
+          report += '\n';
+        });
+        if (liqResult.nftTokenId) report += `   🪙 NFT Position #${liqResult.nftTokenId}\n`;
+        if (liqResult.finalBalance) {
+          report += `   💼 Saldo akhir: ${parseFloat(liqResult.finalBalance).toFixed(4)} X1T\n`;
+        }
+        console.log('✅ [Scheduler] Add liquidity completed');
+      } else {
+        report += `🌊 *Daily Add Liquidity:* ❌ ${liqResult.error}\n`;
+        if (liqResult.steps?.length > 0) {
+          liqResult.steps.forEach(s => {
+            if (!s.success) report += `   ❌ ${s.step}: ${s.error}\n`;
+          });
+        }
+        console.log('⚠️ [Scheduler] Add liquidity failed:', liqResult.error);
+      }
+    } catch (err) {
+      report += `🌊 *Daily Add Liquidity:* ❌ ${err.message}\n`;
+      console.error('❌ [Scheduler] Add liquidity error:', err.message);
+    }
+    report += '\n';
+  }
+
+  // 4. Daily Swap
   if (config.scheduler.autoSwap) {
     console.log(`💱 [Scheduler] Running daily swap (${config.scheduler.swapAmount} X1T)...`);
     try {
@@ -189,6 +225,7 @@ function startScheduler(bot) {
   console.log(`🚀 [Scheduler] Starting — auto tasks every day at ${hh}:${mm} ${config.scheduler.timezone}`);
   console.log(`   💧 Auto Faucet: ${config.scheduler.autoFaucet ? 'ON' : 'OFF'}`);
   console.log(`   🎯 Auto Daily Quests: ${config.scheduler.autoDailyQuests ? 'ON' : 'OFF'}`);
+  console.log(`   🌊 Auto Liquidity: ${config.scheduler.autoLiquidity ? `ON (${config.scheduler.liquidityAmount} X1T)` : 'OFF'}`);
   console.log(`   💱 Auto Swap: ${config.scheduler.autoSwap ? `ON (${config.scheduler.swapAmount} X1T)` : 'OFF'}`);
 
   scheduleNext();

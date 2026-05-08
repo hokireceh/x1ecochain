@@ -20,6 +20,8 @@ module.exports = {
     autoFaucet: process.env.AUTO_FAUCET !== 'false',
     autoDailyQuests: process.env.AUTO_DAILY_QUESTS !== 'false',
     autoSwap: process.env.AUTO_SWAP === 'true',
-    swapAmount: parseFloat(process.env.SWAP_AMOUNT || '0.01')
+    swapAmount: parseFloat(process.env.SWAP_AMOUNT || '0.01'),
+    autoLiquidity: process.env.AUTO_LIQUIDITY === 'true',
+    liquidityAmount: parseFloat(process.env.LIQUIDITY_AMOUNT || '0.01')
   }
 };
