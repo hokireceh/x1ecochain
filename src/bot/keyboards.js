@@ -14,6 +14,7 @@ const mainMenu = {
         { text: '🔗 DC Faucet', callback_data: 'dc_faucet' }
       ],
       [
+        { text: '💱 Daily Swap', callback_data: 'swap' },
         { text: '💸 Send X1T', callback_data: 'transfer' }
       ],
       [
@@ -71,10 +72,22 @@ const confirmRunNow = {
   }
 };
 
+const confirmSwap = {
+  reply_markup: {
+    inline_keyboard: [
+      [
+        { text: '✅ Swap Now', callback_data: 'confirm_swap' },
+        { text: '❌ Cancel', callback_data: 'menu' }
+      ]
+    ]
+  }
+};
+
 module.exports = {
   mainMenu,
   backButton,
   confirmAutoDaily,
   confirmAutoSocial,
-  confirmRunNow
+  confirmRunNow,
+  confirmSwap
 };

@@ -18,6 +18,8 @@ module.exports = {
     minute: parseInt(process.env.AUTO_MINUTE || '5'),
     timezone: process.env.AUTO_TIMEZONE || 'Asia/Jakarta',
     autoFaucet: process.env.AUTO_FAUCET !== 'false',
-    autoDailyQuests: process.env.AUTO_DAILY_QUESTS !== 'false'
+    autoDailyQuests: process.env.AUTO_DAILY_QUESTS !== 'false',
+    autoSwap: process.env.AUTO_SWAP === 'true',
+    swapAmount: parseFloat(process.env.SWAP_AMOUNT || '0.01')
   }
 };

@@ -100,46 +100,48 @@ async function runDailyTasks() {
       report += `🎯 *Daily Quests:* ❌ ${err.message}\n`;
       console.error('❌ [Scheduler] Daily quests error:', err.message);
     }
+    report += '\n';
   }
 
-  report += `\n⏰ *Next run:* tomorrow at ${String(config.scheduler.hour).padStart(2, '0')}:${String(config.scheduler.minute).padStart(2, '0')} (${config.scheduler.timezone})`;
+  // 3. Daily Swap
+  if (config.scheduler.autoSwap) {
+    console.log(`💱 [Scheduler] Running daily swap (${config.scheduler.swapAmount} X1T)...`);
+    try {
+      const swap = require('./swap');
+      const swapResult = await swap.performDailySwap(config.scheduler.swapAmount);
+      if (swapResult.success) {
+        report += `💱 *Daily Swap:* ✅ Completed!\n`;
+        report += `   💰 Amount: ${swapResult.swapAmount} X1T\n`;
+        swapResult.steps.forEach(s => {
+          report += `   ${s.success ? '✅' : '❌'} ${s.step}`;
+          if (s.txHash) report += ` — \`${s.txHash.slice(0, 10)}...\``;
+          if (s.error) report += ` — ${s.error}`;
+          report += '\n';
+        });
+        if (swapResult.finalBalance) {
+          report += `   💼 Final balance: ${parseFloat(swapResult.finalBalance).toFixed(4)} X1T\n`;
+        }
+        console.log('✅ [Scheduler] Swap completed');
+      } else {
+        report += `💱 *Daily Swap:* ❌ ${swapResult.error}\n`;
+        if (swapResult.steps?.length > 0) {
+          swapResult.steps.forEach(s => {
+            if (!s.success) report += `   ❌ ${s.step}: ${s.error}\n`;
+          });
+        }
+        console.log('⚠️ [Scheduler] Swap failed:', swapResult.error);
+      }
+    } catch (err) {
+      report += `💱 *Daily Swap:* ❌ ${err.message}\n`;
+      console.error('❌ [Scheduler] Swap error:', err.message);
+    }
+    report += '\n';
+  }
+
+  report += `⏰ *Next run:* tomorrow at ${String(config.scheduler.hour).padStart(2, '0')}:${String(config.scheduler.minute).padStart(2, '0')} (${config.scheduler.timezone})`;
 
   await sendNotification(report);
   console.log('✅ [Scheduler] Daily tasks completed, notification sent');
-}
-
-function getTodayDateString(timezone) {
-  return new Date().toLocaleDateString('en-CA', { timeZone: timezone });
-}
-
-function getNextRunMs() {
-  const now = new Date();
-  const tz = config.scheduler.timezone;
-  const hour = config.scheduler.hour;
-  const minute = config.scheduler.minute;
-
-  // Build target datetime string in the configured timezone
-  const todayStr = now.toLocaleDateString('en-CA', { timeZone: tz });
-  const targetStr = `${todayStr}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
-
-  // Parse as local time in that timezone using Intl
-  const target = new Date(new Date(targetStr).toLocaleString('en-US', { timeZone: 'UTC' }));
-
-  // Calculate UTC offset difference
-  const utcOffset = getTimezoneOffsetMs(tz, now);
-  const targetUTC = new Date(targetStr).getTime() - utcOffset;
-
-  let msUntil = targetUTC - now.getTime();
-  if (msUntil <= 0) {
-    msUntil += 24 * 60 * 60 * 1000; // next day
-  }
-  return msUntil;
-}
-
-function getTimezoneOffsetMs(tz, date) {
-  const utcStr = date.toLocaleString('en-US', { timeZone: 'UTC' });
-  const tzStr = date.toLocaleString('en-US', { timeZone: tz });
-  return new Date(utcStr) - new Date(tzStr);
 }
 
 function scheduleNext() {
@@ -148,7 +150,6 @@ function scheduleNext() {
   const hour = config.scheduler.hour;
   const minute = config.scheduler.minute;
 
-  // Find next occurrence of hour:minute in target timezone
   const nowInTz = new Date(now.toLocaleString('en-US', { timeZone: tz }));
   const todayRun = new Date(nowInTz);
   todayRun.setHours(hour, minute, 0, 0);
@@ -164,7 +165,7 @@ function scheduleNext() {
   console.log(`⏰ [Scheduler] Next auto run at ${hh}:${mm} ${tz} (in ${hoursUntil}h)`);
 
   schedulerInterval = setTimeout(async () => {
-    const todayDate = getTodayDateString(tz);
+    const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: tz });
     if (lastRunDate !== todayDate) {
       lastRunDate = todayDate;
       await runDailyTasks();
@@ -183,9 +184,12 @@ function startScheduler(bot) {
     return;
   }
 
-  console.log(`🚀 [Scheduler] Starting — auto tasks every day at ${String(config.scheduler.hour).padStart(2, '0')}:${String(config.scheduler.minute).padStart(2, '0')} ${config.scheduler.timezone}`);
+  const hh = String(config.scheduler.hour).padStart(2, '0');
+  const mm = String(config.scheduler.minute).padStart(2, '0');
+  console.log(`🚀 [Scheduler] Starting — auto tasks every day at ${hh}:${mm} ${config.scheduler.timezone}`);
   console.log(`   💧 Auto Faucet: ${config.scheduler.autoFaucet ? 'ON' : 'OFF'}`);
   console.log(`   🎯 Auto Daily Quests: ${config.scheduler.autoDailyQuests ? 'ON' : 'OFF'}`);
+  console.log(`   💱 Auto Swap: ${config.scheduler.autoSwap ? `ON (${config.scheduler.swapAmount} X1T)` : 'OFF'}`);
 
   scheduleNext();
 }

@@ -2,6 +2,7 @@ const api = require('../services/api');
 const keyboards = require('./keyboards');
 const config = require('../config');
 const scheduler = require('../services/scheduler');
+const swap = require('../services/swap');
 
 function isAllowed(userId) {
   if (config.telegram.allowedUsers.length === 0) return true;
@@ -422,6 +423,88 @@ Or press back to cancel.`;
       }
       break;
       
+    case 'swap': {
+      try {
+        await ctx.editMessageText('⏳ Memuat info swap...', { parse_mode: 'Markdown' });
+        const balances = await swap.getSwapBalances();
+        const swapAmount = config.scheduler.swapAmount;
+        const autoSwapStatus = config.scheduler.autoSwap ? `✅ ON (${swapAmount} X1T/hari)` : '❌ OFF';
+
+        let text = `💱 *EcoDex Daily Swap*\n\n`;
+        if (balances.success) {
+          text += `💼 *Saldo saat ini:*\n`;
+          text += `   X1T: ${parseFloat(balances.x1t).toFixed(4)}\n`;
+          text += `   WX1T: ${parseFloat(balances.wx1t).toFixed(6)}\n`;
+          text += `   USDT: ${parseFloat(balances.usdt).toFixed(4)}\n`;
+          text += `   💹 Harga WX1T: ${balances.priceWX1TinUSDT} USDT\n\n`;
+        }
+        text += `🔄 *Alur swap:*\n`;
+        text += `X1T → WX1T → USDT → WX1T → X1T\n\n`;
+        text += `💰 *Jumlah per swap:* ${swapAmount} X1T\n`;
+        text += `⚙️ *Auto swap harian:* ${autoSwapStatus}\n\n`;
+        text += `Jalankan swap sekarang?`;
+
+        await ctx.editMessageText(text, {
+          parse_mode: 'Markdown',
+          ...keyboards.confirmSwap
+        });
+      } catch (err) {
+        console.error('Swap menu error:', err.message);
+        await ctx.editMessageText(`❌ Error: ${err.message}`, {
+          parse_mode: 'Markdown',
+          ...keyboards.backButton
+        });
+      }
+      break;
+    }
+
+    case 'confirm_swap':
+      try {
+        const swapAmount = config.scheduler.swapAmount;
+        await ctx.editMessageText(
+          `⏳ *Menjalankan swap ${swapAmount} X1T...*\n\nProses ini bisa memakan waktu 1-2 menit.\nTunggu sebentar...`,
+          { parse_mode: 'Markdown' }
+        );
+        const result = await swap.performDailySwap(swapAmount);
+        if (result.success) {
+          let text = `✅ *Swap Selesai!*\n\n`;
+          text += `💰 *Jumlah:* ${result.swapAmount} X1T\n\n`;
+          text += `📋 *Detail langkah:*\n`;
+          result.steps.forEach(s => {
+            text += `${s.success ? '✅' : '❌'} ${s.step}`;
+            if (s.txHash) text += `\n   \`${s.txHash.slice(0, 16)}...\``;
+            if (s.error) text += `\n   ${s.error}`;
+            text += '\n';
+          });
+          if (result.finalBalance) {
+            text += `\n💼 *Saldo akhir:* ${parseFloat(result.finalBalance).toFixed(4)} X1T`;
+          }
+          await ctx.editMessageText(text, {
+            parse_mode: 'Markdown',
+            ...keyboards.backButton
+          });
+        } else {
+          let text = `❌ *Swap Gagal*\n\n${result.error}`;
+          if (result.steps?.length > 0) {
+            const done = result.steps.filter(s => s.success);
+            if (done.length > 0) {
+              text += `\n\n✅ Selesai ${done.length} langkah sebelum error`;
+            }
+          }
+          await ctx.editMessageText(text, {
+            parse_mode: 'Markdown',
+            ...keyboards.backButton
+          });
+        }
+      } catch (err) {
+        console.error('Swap error:', err.message);
+        await ctx.editMessageText(`❌ Error: ${err.message}`, {
+          parse_mode: 'Markdown',
+          ...keyboards.backButton
+        });
+      }
+      break;
+
     case 'run_now': {
       const tz = config.scheduler.timezone;
       const hh = String(config.scheduler.hour).padStart(2, '0');
