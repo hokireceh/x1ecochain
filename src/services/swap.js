@@ -87,14 +87,12 @@ function calcPriceFromSqrt(sqrtPriceX96Str, token0IsUSDT = true) {
 async function swapWX1TtoUSDT(wallet, amountInWei, poolInfo) {
   const router = new ethers.Contract(SWAP_ROUTER, SWAP_ROUTER_ABI, wallet);
 
-  // estimate amountOut from pool price
+  // token0=USDT, token1=WX1T
+  // Swapping token1→token0: amountOut(USDT) = amountIn(WX1T) / price
+  // price = (sqrtP/Q96)^2  →  amountOut = amountIn * Q96^2 / sqrtP^2
   const sqrtPrice = BigInt(poolInfo.sqrtPrice);
   const Q96 = BigInt(2) ** BigInt(96);
-  // token0=USDT, token1=WX1T → price of WX1T in USDT = (sqrtP/Q96)^2
-  const priceNum = sqrtPrice * sqrtPrice;
-  const priceDen = Q96 * Q96;
-  // amountOut (USDT) = amountIn (WX1T) * (sqrtP/Q96)^2
-  const estimatedOut = amountInWei * priceNum / priceDen;
+  const estimatedOut = amountInWei * (Q96 * Q96) / (sqrtPrice * sqrtPrice);
   const amountOutMin = applySlippage(estimatedOut);
 
   const deadline = Math.floor(Date.now() / 1000) + 600; // 10 min
@@ -124,12 +122,12 @@ async function swapWX1TtoUSDT(wallet, amountInWei, poolInfo) {
 async function swapUSDTtoWX1T(wallet, amountInWei, poolInfo) {
   const router = new ethers.Contract(SWAP_ROUTER, SWAP_ROUTER_ABI, wallet);
 
-  // price of USDT in WX1T = (Q96/sqrtP)^2 = 1/(sqrtP/Q96)^2
+  // token0=USDT, token1=WX1T
+  // Swapping token0→token1: amountOut(WX1T) = amountIn(USDT) * price
+  // price = (sqrtP/Q96)^2  →  amountOut = amountIn * sqrtP^2 / Q96^2
   const sqrtPrice = BigInt(poolInfo.sqrtPrice);
   const Q96 = BigInt(2) ** BigInt(96);
-  const priceDen = sqrtPrice * sqrtPrice;
-  const priceNum = Q96 * Q96;
-  const estimatedOut = amountInWei * priceNum / priceDen;
+  const estimatedOut = amountInWei * (sqrtPrice * sqrtPrice) / (Q96 * Q96);
   const amountOutMin = applySlippage(estimatedOut);
 
   const deadline = Math.floor(Date.now() / 1000) + 600;

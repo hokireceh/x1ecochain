@@ -114,8 +114,9 @@ async function swapWX1TtoUSDT(wallet, amountInWei, sqrtPriceX96) {
   const router = new ethers.Contract(SWAP_ROUTER, SWAP_ROUTER_ABI, wallet);
   const Q96 = BigInt(2) ** BigInt(96);
   const sqrtP = sqrtPriceX96;
-  // price of WX1T in USDT = (sqrtP/Q96)^2
-  const estimatedOut = amountInWei * sqrtP * sqrtP / (Q96 * Q96);
+  // token0=USDT, token1=WX1T → swapping token1→token0
+  // amountOut(USDT) = amountIn(WX1T) / price = amountIn * Q96^2 / sqrtP^2
+  const estimatedOut = amountInWei * (Q96 * Q96) / (sqrtP * sqrtP);
   const amountOutMin = applySlippage(estimatedOut);
   const deadline = Math.floor(Date.now() / 1000) + 600;
 

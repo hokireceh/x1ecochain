@@ -10,6 +10,16 @@ const tokenCreator = require('../services/tokenCreator');
 // Map<userId, { step, name, symbol, decimals, supply }>
 const tokenSessions = new Map();
 
+// ─── Sanitize error messages for safe Telegram display ───────────────────────
+function safeError(msg) {
+  if (!msg) return 'Unknown error';
+  // Extract only the short reason if it's an ethers revert error
+  const revertMatch = msg.match(/reason="([^"]+)"/);
+  if (revertMatch) return revertMatch[1];
+  const shortMsg = msg.split('\n')[0].replace(/[`*_[\]()~>#+=|{}.!\\-]/g, '\\$&');
+  return shortMsg.length > 200 ? shortMsg.slice(0, 200) + '...' : shortMsg;
+}
+
 function isAllowed(userId) {
   if (config.telegram.allowedUsers.length === 0) return true;
   return config.telegram.allowedUsers.includes(userId);
@@ -466,8 +476,8 @@ Or press back to cancel.`;
         });
       } catch (err) {
         console.error('Liquidity menu error:', err.message);
-        await ctx.editMessageText(`❌ Error: ${err.message}`, {
-          parse_mode: 'Markdown',
+        await ctx.editMessageText(`❌ Error: ${safeError(err.message)}`, {
+          parse_mode: 'MarkdownV2',
           ...keyboards.backButton
         });
       }
@@ -478,44 +488,41 @@ Or press back to cancel.`;
       try {
         const liqAmount = config.scheduler.liquidityAmount;
         await ctx.editMessageText(
-          `⏳ *Menjalankan add liquidity ${liqAmount} X1T...*\n\nProses ini mencakup:\n1️⃣ Wrap X1T→WX1T\n2️⃣ Swap ½ WX1T→USDT\n3️⃣ Add ke pool USDT/WX1T\n\nTunggu 1-2 menit...`,
-          { parse_mode: 'Markdown' }
+          `⏳ *Menjalankan add liquidity ${liqAmount} X1T\\.\\.\\.*\n\nProses ini mencakup:\n1️⃣ Wrap X1T→WX1T\n2️⃣ Swap ½ WX1T→USDT\n3️⃣ Add ke pool USDT/WX1T\n\nTunggu 1\\-2 menit\\.\\.\\.`,
+          { parse_mode: 'MarkdownV2' }
         );
         const result = await liquidity.performDailyLiquidity(liqAmount);
         if (result.success) {
-          let text = `✅ *Add Liquidity Selesai!*\n\n`;
+          let text = `✅ *Add Liquidity Selesai\\!*\n\n`;
           text += `💰 *Jumlah:* ${result.liquidityAmount} X1T\n`;
-          if (result.nftTokenId) text += `🪙 *NFT Position:* #${result.nftTokenId}\n`;
-          if (result.action === 'mint') text += `🆕 *Posisi baru dibuat!*\n`;
+          if (result.nftTokenId) text += `🪙 *NFT Position:* \\#${result.nftTokenId}\n`;
+          if (result.action === 'mint') text += `🆕 *Posisi baru dibuat\\!*\n`;
           text += `\n📋 *Detail langkah:*\n`;
           result.steps.forEach(s => {
             text += `${s.success ? '✅' : '❌'} ${s.step}`;
-            if (s.txHash) text += `\n   \`${s.txHash.slice(0, 16)}...\``;
-            if (s.error) text += `\n   ${s.error}`;
+            if (s.txHash) text += `\n   \`${s.txHash.slice(0, 16)}\\.\\.\\.\``;
+            if (s.error) text += `\n   ${safeError(s.error)}`;
             text += '\n';
           });
           if (result.finalBalance) {
             text += `\n💼 *Saldo akhir:* ${parseFloat(result.finalBalance).toFixed(4)} X1T`;
           }
           await ctx.editMessageText(text, {
-            parse_mode: 'Markdown',
+            parse_mode: 'MarkdownV2',
             ...keyboards.backButton
           });
         } else {
-          let text = `❌ *Add Liquidity Gagal*\n\n${result.error}`;
+          const errTxt = safeError(result.error);
+          let text = `❌ *Add Liquidity Gagal*\n\n${errTxt}`;
           if (result.steps?.length > 0) {
             const done = result.steps.filter(s => s.success);
             if (done.length > 0) text += `\n\n✅ Selesai ${done.length} langkah sebelum error`;
           }
-          await ctx.editMessageText(text, {
-            parse_mode: 'Markdown',
-            ...keyboards.backButton
-          });
+          await ctx.editMessageText(text, { ...keyboards.backButton });
         }
       } catch (err) {
         console.error('Liquidity error:', err.message);
-        await ctx.editMessageText(`❌ Error: ${err.message}`, {
-          parse_mode: 'Markdown',
+        await ctx.editMessageText(`❌ Error: ${safeError(err.message)}`, {
           ...keyboards.backButton
         });
       }
@@ -548,8 +555,7 @@ Or press back to cancel.`;
         });
       } catch (err) {
         console.error('Swap menu error:', err.message);
-        await ctx.editMessageText(`❌ Error: ${err.message}`, {
-          parse_mode: 'Markdown',
+        await ctx.editMessageText(`❌ Error: ${safeError(err.message)}`, {
           ...keyboards.backButton
         });
       }
@@ -560,18 +566,17 @@ Or press back to cancel.`;
       try {
         const swapAmount = config.scheduler.swapAmount;
         await ctx.editMessageText(
-          `⏳ *Menjalankan swap ${swapAmount} X1T...*\n\nProses ini bisa memakan waktu 1-2 menit.\nTunggu sebentar...`,
-          { parse_mode: 'Markdown' }
+          `⏳ Menjalankan swap ${swapAmount} X1T...\n\nProses ini bisa memakan waktu 1-2 menit.\nTunggu sebentar...`,
+          {}
         );
         const result = await swap.performDailySwap(swapAmount);
         if (result.success) {
           let text = `✅ *Swap Selesai!*\n\n`;
           text += `💰 *Jumlah:* ${result.swapAmount} X1T\n\n`;
-          text += `📋 *Detail langkah:*\n`;
+          text += `📋 *Detail:*\n`;
           result.steps.forEach(s => {
             text += `${s.success ? '✅' : '❌'} ${s.step}`;
-            if (s.txHash) text += `\n   \`${s.txHash.slice(0, 16)}...\``;
-            if (s.error) text += `\n   ${s.error}`;
+            if (s.txHash) text += ` — \`${s.txHash.slice(0, 16)}...\``;
             text += '\n';
           });
           if (result.finalBalance) {
@@ -582,12 +587,11 @@ Or press back to cancel.`;
             ...keyboards.backButton
           });
         } else {
-          let text = `❌ *Swap Gagal*\n\n${result.error}`;
+          const errTxt = safeError(result.error);
+          let text = `❌ *Swap Gagal*\n\n${errTxt}`;
           if (result.steps?.length > 0) {
             const done = result.steps.filter(s => s.success);
-            if (done.length > 0) {
-              text += `\n\n✅ Selesai ${done.length} langkah sebelum error`;
-            }
+            if (done.length > 0) text += `\n\n✅ Selesai ${done.length} langkah sebelum error`;
           }
           await ctx.editMessageText(text, {
             parse_mode: 'Markdown',
@@ -596,7 +600,7 @@ Or press back to cancel.`;
         }
       } catch (err) {
         console.error('Swap error:', err.message);
-        await ctx.editMessageText(`❌ Error: ${err.message}`, {
+        await ctx.editMessageText(`❌ Swap error: ${safeError(err.message)}`, {
           parse_mode: 'Markdown',
           ...keyboards.backButton
         });
@@ -625,7 +629,7 @@ Or press back to cancel.`;
         });
       } catch (err) {
         console.error('Run now error:', err.message);
-        await ctx.editMessageText(`❌ Error: ${err.message}`, {
+        await ctx.editMessageText(`❌ Error: ${safeError(err.message)}`, {
           parse_mode: 'Markdown',
           ...keyboards.backButton
         });
@@ -657,7 +661,7 @@ Or press back to cancel.`;
         } else if (result.success) {
           text += `_Belum ada token yang dibuat._\n\nKlik 🪙 Create Token untuk membuat token pertamamu!`;
         } else {
-          text += `❌ ${result.error}`;
+          text += `❌ ${safeError(result.error)}`;
         }
         await ctx.editMessageText(text, {
           parse_mode: 'Markdown',
@@ -665,7 +669,7 @@ Or press back to cancel.`;
           ...keyboards.backButton
         });
       } catch (err) {
-        await ctx.editMessageText(`❌ Error: ${err.message}`, {
+        await ctx.editMessageText(`❌ Error: ${safeError(err.message)}`, {
           parse_mode: 'Markdown',
           ...keyboards.backButton
         });
@@ -724,14 +728,14 @@ Or press back to cancel.`;
             ...keyboards.backButton
           });
         } else {
-          await ctx.editMessageText(`❌ *Deploy Gagal*\n\n${result.error}`, {
+          await ctx.editMessageText(`❌ *Deploy Gagal*\n\n${safeError(result.error)}`, {
             parse_mode: 'Markdown',
             ...keyboards.backButton
           });
         }
       } catch (err) {
         console.error('Token deploy error:', err.message);
-        await ctx.editMessageText(`❌ Error: ${err.message}`, {
+        await ctx.editMessageText(`❌ Deploy error: ${safeError(err.message)}`, {
           parse_mode: 'Markdown',
           ...keyboards.backButton
         });
@@ -779,7 +783,7 @@ async function handleTransfer(ctx) {
       }
       await ctx.reply(text, { parse_mode: 'Markdown', ...keyboards.mainMenu });
     } else {
-      await ctx.reply(`❌ Transfer Failed\n\n${result.error}`, { parse_mode: 'Markdown', ...keyboards.mainMenu });
+      await ctx.reply(`❌ Transfer Failed\n\n${safeError(result.error)}`, { parse_mode: 'Markdown', ...keyboards.mainMenu });
     }
   } catch (err) {
     console.error('Transfer error:', err.message);
