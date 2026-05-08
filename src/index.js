@@ -52,13 +52,14 @@ async function initBot() {
     bot.start((ctx) => handlers.handleStart(ctx));
     bot.hears(/^(0x[a-fA-F0-9]{40})(?:\s+(\S+))?/, (ctx) => handlers.handleTransfer(ctx));
     bot.on('callback_query', (ctx) => handlers.handleCallback(ctx));
+    bot.on('text', (ctx) => handlers.handleTextMessage(ctx));
 
     // Launch bot
     bot.launch({
       polling: {
         timeout: 30,
         limit: 100,
-        allowedUpdates: ['message', 'callback_query']
+        allowedUpdates: ['message', 'callback_query', 'inline_query']
       }
     });
 

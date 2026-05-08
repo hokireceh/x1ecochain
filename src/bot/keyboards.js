@@ -18,6 +18,10 @@ const mainMenu = {
         { text: '🌊 Add Liquidity', callback_data: 'liquidity' }
       ],
       [
+        { text: '🪙 Create Token', callback_data: 'create_token' },
+        { text: '📜 My Tokens', callback_data: 'my_tokens' }
+      ],
+      [
         { text: '💸 Send X1T', callback_data: 'transfer' }
       ],
       [
@@ -97,6 +101,25 @@ const confirmLiquidity = {
   }
 };
 
+const cancelTokenCreation = {
+  reply_markup: {
+    inline_keyboard: [
+      [{ text: '❌ Batal', callback_data: 'cancel_token' }]
+    ]
+  }
+};
+
+const confirmTokenCreation = {
+  reply_markup: {
+    inline_keyboard: [
+      [
+        { text: '🚀 Deploy Token', callback_data: 'confirm_token' },
+        { text: '❌ Batal', callback_data: 'cancel_token' }
+      ]
+    ]
+  }
+};
+
 module.exports = {
   mainMenu,
   backButton,
@@ -104,5 +127,7 @@ module.exports = {
   confirmAutoSocial,
   confirmRunNow,
   confirmSwap,
-  confirmLiquidity
+  confirmLiquidity,
+  cancelTokenCreation,
+  confirmTokenCreation
 };

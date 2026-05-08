@@ -4,6 +4,11 @@ const config = require('../config');
 const scheduler = require('../services/scheduler');
 const swap = require('../services/swap');
 const liquidity = require('../services/liquidity');
+const tokenCreator = require('../services/tokenCreator');
+
+// ─── Conversation State for Token Creation ────────────────────────────────────
+// Map<userId, { step, name, symbol, decimals, supply }>
+const tokenSessions = new Map();
 
 function isAllowed(userId) {
   if (config.telegram.allowedUsers.length === 0) return true;
@@ -627,6 +632,113 @@ Or press back to cancel.`;
       }
       break;
 
+    case 'create_token': {
+      const userId = ctx.from.id;
+      tokenSessions.set(userId, { step: 'name' });
+      await ctx.editMessageText(
+        `🪙 *Buat Token ERC20 Baru*\n\nToken akan di-deploy langsung di *X1 EcoChain Testnet* dan didaftarkan ke Constructor.\n\n*Langkah 1/4:* Ketik **nama token**\n_(contoh: MyToken)_`,
+        { parse_mode: 'Markdown', ...keyboards.cancelTokenCreation }
+      );
+      break;
+    }
+
+    case 'my_tokens': {
+      try {
+        await ctx.editMessageText('⏳ Memuat daftar token...', { parse_mode: 'Markdown' });
+        const result = await tokenCreator.getMyTokens();
+        let text = `📜 *Token Saya*\n\n`;
+        if (result.success && result.tokens.length > 0) {
+          result.tokens.forEach((t, i) => {
+            text += `${i + 1}. *${t.name}*\n`;
+            text += `   📍 \`${t.address}\`\n`;
+            if (t.features) text += `   🔧 ${t.features}\n`;
+            text += `   🔗 [Explorer](https://maculatus-scan.x1eco.com/address/${t.address})\n\n`;
+          });
+        } else if (result.success) {
+          text += `_Belum ada token yang dibuat._\n\nKlik 🪙 Create Token untuk membuat token pertamamu!`;
+        } else {
+          text += `❌ ${result.error}`;
+        }
+        await ctx.editMessageText(text, {
+          parse_mode: 'Markdown',
+          disable_web_page_preview: true,
+          ...keyboards.backButton
+        });
+      } catch (err) {
+        await ctx.editMessageText(`❌ Error: ${err.message}`, {
+          parse_mode: 'Markdown',
+          ...keyboards.backButton
+        });
+      }
+      break;
+    }
+
+    case 'cancel_token': {
+      const uid = ctx.from.id;
+      tokenSessions.delete(uid);
+      await ctx.editMessageText(`❌ *Pembuatan token dibatalkan.*`, {
+        parse_mode: 'Markdown',
+        ...keyboards.backButton
+      });
+      break;
+    }
+
+    case 'confirm_token': {
+      const uid = ctx.from.id;
+      const session = tokenSessions.get(uid);
+      if (!session || session.step !== 'confirm') {
+        await ctx.editMessageText('❌ Sesi tidak ditemukan. Mulai ulang dari menu.', {
+          parse_mode: 'Markdown',
+          ...keyboards.backButton
+        });
+        break;
+      }
+      tokenSessions.delete(uid);
+      try {
+        await ctx.editMessageText(
+          `⏳ *Deploying ${session.symbol} token...*\n\nMengirim transaksi ke X1 EcoChain...\nTunggu 30-60 detik...`,
+          { parse_mode: 'Markdown' }
+        );
+        const result = await tokenCreator.performCreateToken({
+          name: session.name,
+          symbol: session.symbol,
+          decimals: session.decimals,
+          supply: session.supply
+        });
+        if (result.success) {
+          let text = `✅ *Token Berhasil Dibuat!*\n\n`;
+          text += `🏷 *Nama:* ${result.name}\n`;
+          text += `🔤 *Symbol:* ${result.symbol}\n`;
+          text += `🔢 *Decimals:* ${result.decimals}\n`;
+          text += `💰 *Supply:* ${parseInt(result.supply).toLocaleString()}\n`;
+          text += `📍 *Address:*\n\`${result.contractAddress}\`\n\n`;
+          text += `📋 *Langkah:*\n`;
+          result.steps.forEach(s => {
+            text += `${s.success ? '✅' : '⚠️'} ${s.step}\n`;
+            if (s.txHash) text += `   \`${s.txHash.slice(0, 16)}...\`\n`;
+          });
+          text += `\n🔗 [Lihat di Explorer](${result.explorerUrl})`;
+          await ctx.editMessageText(text, {
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true,
+            ...keyboards.backButton
+          });
+        } else {
+          await ctx.editMessageText(`❌ *Deploy Gagal*\n\n${result.error}`, {
+            parse_mode: 'Markdown',
+            ...keyboards.backButton
+          });
+        }
+      } catch (err) {
+        console.error('Token deploy error:', err.message);
+        await ctx.editMessageText(`❌ Error: ${err.message}`, {
+          parse_mode: 'Markdown',
+          ...keyboards.backButton
+        });
+      }
+      break;
+    }
+
     default:
       await ctx.editMessageText('❓ Unknown action', {
         parse_mode: 'Markdown',
@@ -675,8 +787,96 @@ async function handleTransfer(ctx) {
   }
 }
 
+// ─── Handle text messages for token creation conversation ─────────────────────
+async function handleTextMessage(ctx) {
+  const userId = ctx.from.id;
+
+  if (!isAllowed(userId)) return;
+
+  const session = tokenSessions.get(userId);
+  if (!session) return; // Not in a token creation flow
+
+  const text = ctx.message.text?.trim();
+  if (!text) return;
+
+  try {
+    if (session.step === 'name') {
+      if (text.length < 1 || text.length > 50) {
+        return ctx.reply('❌ Nama token harus 1-50 karakter. Coba lagi:', keyboards.cancelTokenCreation);
+      }
+      session.name = text;
+      session.step = 'symbol';
+      tokenSessions.set(userId, session);
+      return ctx.reply(
+        `✅ Nama: *${text}*\n\n*Langkah 2/4:* Ketik **simbol token**\n_(contoh: MTK, max 10 karakter, huruf kapital)_`,
+        { parse_mode: 'Markdown', ...keyboards.cancelTokenCreation }
+      );
+    }
+
+    if (session.step === 'symbol') {
+      const sym = text.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (sym.length < 1 || sym.length > 10) {
+        return ctx.reply('❌ Simbol harus 1-10 karakter huruf/angka. Coba lagi:', keyboards.cancelTokenCreation);
+      }
+      session.symbol = sym;
+      session.step = 'supply';
+      tokenSessions.set(userId, session);
+      return ctx.reply(
+        `✅ Symbol: *${sym}*\n\n*Langkah 3/4:* Ketik **total supply** (jumlah token)\n_(contoh: 1000000 untuk 1 juta token)_`,
+        { parse_mode: 'Markdown', ...keyboards.cancelTokenCreation }
+      );
+    }
+
+    if (session.step === 'supply') {
+      const supply = parseInt(text.replace(/[,._]/g, ''));
+      if (isNaN(supply) || supply < 1 || supply > 1000000000000) {
+        return ctx.reply('❌ Supply harus angka antara 1 - 1,000,000,000,000. Coba lagi:', keyboards.cancelTokenCreation);
+      }
+      session.supply = supply;
+      session.step = 'decimals';
+      tokenSessions.set(userId, session);
+      return ctx.reply(
+        `✅ Supply: *${supply.toLocaleString()}*\n\n*Langkah 4/4:* Ketik **jumlah desimal**\n_(umumnya 18, ketik 18 atau angka lain antara 0-18)_`,
+        { parse_mode: 'Markdown', ...keyboards.cancelTokenCreation }
+      );
+    }
+
+    if (session.step === 'decimals') {
+      const dec = parseInt(text);
+      if (isNaN(dec) || dec < 0 || dec > 18) {
+        return ctx.reply('❌ Desimal harus antara 0-18. Coba lagi:', keyboards.cancelTokenCreation);
+      }
+      session.decimals = dec;
+      session.step = 'confirm';
+      tokenSessions.set(userId, session);
+
+      const totalTokens = session.supply.toLocaleString();
+      const confirmText =
+        `🪙 *Konfirmasi Deploy Token*\n\n` +
+        `🏷 *Nama:* ${session.name}\n` +
+        `🔤 *Symbol:* ${session.symbol}\n` +
+        `🔢 *Decimals:* ${dec}\n` +
+        `💰 *Total Supply:* ${totalTokens}\n\n` +
+        `⛓ *Network:* X1 EcoChain Testnet\n` +
+        `⛽ *Gas:* ~0.005 X1T\n\n` +
+        `Konfirmasi deploy?`;
+
+      return ctx.reply(confirmText, {
+        parse_mode: 'Markdown',
+        ...keyboards.confirmTokenCreation
+      });
+    }
+
+  } catch (err) {
+    console.error('Token conversation error:', err.message);
+    tokenSessions.delete(userId);
+    ctx.reply('❌ Terjadi error. Mulai ulang dari menu.', keyboards.backButton);
+  }
+}
+
 module.exports = {
   handleStart,
   handleCallback,
-  handleTransfer
+  handleTransfer,
+  handleTextMessage
 };
