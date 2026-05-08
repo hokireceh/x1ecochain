@@ -13,11 +13,16 @@ const tokenSessions = new Map();
 // ─── Sanitize error messages for safe Telegram display ───────────────────────
 function safeError(msg) {
   if (!msg) return 'Unknown error';
-  // Extract only the short reason if it's an ethers revert error
   const revertMatch = msg.match(/reason="([^"]+)"/);
-  if (revertMatch) return revertMatch[1];
-  const shortMsg = msg.split('\n')[0].replace(/[`*_[\]()~>#+=|{}.!\\-]/g, '\\$&');
+  if (revertMatch) return revertMatch[1].replace(/[_*`[]/g, '\\$&');
+  const shortMsg = msg.split('\n')[0].replace(/[_*`[]/g, '\\$&');
   return shortMsg.length > 200 ? shortMsg.slice(0, 200) + '...' : shortMsg;
+}
+
+// ─── Escape Markdown v1 special chars in dynamic string values ───────────────
+function escMd(str) {
+  if (str == null) return '';
+  return String(str).replace(/[_*`[]/g, '\\$&');
 }
 
 function isAllowed(userId) {
@@ -453,21 +458,21 @@ Or press back to cancel.`;
           text += `   USDT: ${parseFloat(info.amountUSDT).toFixed(6)}\n`;
           text += `   WX1T: ${parseFloat(info.amountWX1T).toFixed(4)}\n`;
           text += `   💰 Nilai: $${parseFloat(info.positionValueUSD).toFixed(6)}\n`;
-          text += `   📈 APR: ${info.aprPercent}%\n`;
-          text += `   🔵 Status: ${info.positionStatus}\n`;
+          text += `   📈 APR: ${escMd(info.aprPercent)}%\n`;
+          text += `   🔵 Status: ${escMd(info.positionStatus)}\n`;
           const feeTot = parseFloat(info.feesUSDT) + parseFloat(info.feesWX1T);
           if (feeTot > 0) text += `   💸 Fee earned: ~$${feeTot.toFixed(8)}\n`;
           text += '\n';
         } else if (info.success && !info.hasPosition) {
-          text += `⚠️ *Belum ada posisi aktif.*\nAkan dibuat posisi baru full-range.\n\n`;
+          text += `⚠️ *Belum ada posisi aktif.*\nAkan dibuat posisi baru full\\-range.\n\n`;
         }
 
-        text += `📊 *Harga WX1T:* ${info.success ? info.priceWX1TinUSDT : 'N/A'} USDT\n`;
+        text += `📊 *Harga WX1T:* ${info.success ? escMd(info.priceWX1TinUSDT) : 'N/A'} USDT\n`;
         text += `💼 *Saldo X1T:* ${info.success ? parseFloat(info.x1tBalance).toFixed(4) : 'N/A'}\n\n`;
         text += `🔄 *Alur:*\n`;
-        text += `X1T → WX1T → ½ swap ke USDT → Add ke pool\n\n`;
-        text += `💰 *Jumlah per hari:* ${liqAmount} X1T\n`;
-        text += `⚙️ *Auto liquidity:* ${autoLiqStatus}\n\n`;
+        text += `X1T → WX1T → 1/2 swap ke USDT → Add ke pool\n\n`;
+        text += `💰 *Jumlah per hari:* ${escMd(liqAmount)} X1T\n`;
+        text += `⚙️ *Auto liquidity:* ${escMd(autoLiqStatus)}\n\n`;
         text += `Lanjutkan add liquidity sekarang?`;
 
         await ctx.editMessageText(text, {
