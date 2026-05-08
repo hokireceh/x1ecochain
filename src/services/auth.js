@@ -4,7 +4,7 @@ const path = require('path');
 const { ethers } = require('ethers');
 
 const TOKENS_FILE = path.join(__dirname, '../../tokens.json');
-const API_BASE_URL = 'https://testnet-api.x1.one';
+const API_BASE_URL = 'https://testnet-api.x1eco.com';
 
 function loadTokens() {
   try {

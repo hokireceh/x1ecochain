@@ -103,7 +103,7 @@ function getFaucetClient() {
   } else {
     const axios = require('axios');
     return axios.create({
-      baseURL: 'https://nft-api.x1.one',
+      baseURL: 'https://nft-api.x1eco.com',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': global.x1AuthToken || ''
@@ -241,7 +241,7 @@ async function claimFaucet() {
     const faucetClient = getFaucetClient();
     
     if (USE_CLOUDSCRAPER) {
-      const response = await faucetClient.get(`https://nft-api.x1.one/testnet/faucet?address=${address}`);
+      const response = await faucetClient.get(`https://nft-api.x1eco.com/testnet/faucet?address=${address}`);
       return { success: true, data: response.data };
     } else {
       const response = await faucetClient.get(`/testnet/faucet?address=${address}`);
@@ -256,14 +256,14 @@ async function claimFaucet() {
       console.log('⏰ API returned 401 - refreshing token...');
       try {
         global.x1AuthToken = await auth.getValidToken(config.x1api.walletPrivateKey);
-        const address = config.x1api.walletAddress;
+        const retryAddress = global.walletAddress;
         const faucetClient = getFaucetClient();
         
         if (USE_CLOUDSCRAPER) {
-          const response = await faucetClient.get(`https://nft-api.x1.one/testnet/faucet?address=${address}`);
+          const response = await faucetClient.get(`https://nft-api.x1eco.com/testnet/faucet?address=${retryAddress}`);
           return { success: true, data: response.data };
         } else {
-          const response = await faucetClient.get(`/testnet/faucet?address=${address}`);
+          const response = await faucetClient.get(`/testnet/faucet?address=${retryAddress}`);
           return { success: true, data: response.data };
         }
       } catch (refreshErr) {
