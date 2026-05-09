@@ -24,7 +24,6 @@ async function initBot() {
     global.x1AuthToken = token;
 
     const api = require('./services/api');
-    const { httpsAgent } = require('./services/api');
     const userInfo = await api.getUserInfo();
 
     if (userInfo.success) {
@@ -38,11 +37,7 @@ async function initBot() {
     }
 
     const bot = new Telegraf(config.telegram.token, {
-      handlerTimeout: 120000,
-      telegram: {
-        agent: httpsAgent,
-        apiRoot: 'https://api.telegram.org'
-      }
+      handlerTimeout: 120000
     });
 
     console.log('🤖 X1 EcoChain Bot started!');
