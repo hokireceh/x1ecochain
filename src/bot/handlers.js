@@ -481,9 +481,30 @@ async function handleCallback(ctx) {
 
     case 'create_token': {
       const userId = ctx.from.id;
-      tokenSessions.set(userId, { step: 'name' });
+      tokenSessions.set(userId, { step: 'features', features: [] });
+      const featureText =
+        `🪙 <b>Buat Token ERC20 Baru</b>\n\n` +
+        `<b>Langkah 1/3 — Pilih Fitur Token:</b>\n\n` +
+        `Centang fitur yang diinginkan, lalu tekan <b>Lanjut</b>.\n` +
+        `<i>ERC20 Token selalu disertakan secara default.</i>`;
+      await ctx.editMessageText(featureText, { ...HTML, ...keyboards.buildFeatureKeyboard([]) });
+      break;
+    }
+
+    case 'features_done': {
+      const userId = ctx.from.id;
+      const session = tokenSessions.get(userId);
+      if (!session || session.step !== 'features') break;
+      session.step = 'name';
+      tokenSessions.set(userId, session);
+      const selectedLabels = keyboards.AVAILABLE_FEATURES
+        .filter(f => session.features.includes(f.key))
+        .map(f => f.label);
+      const featSummary = selectedLabels.length > 0
+        ? `✅ Fitur dipilih: <b>${selectedLabels.join(', ')}</b>\n\n`
+        : `<i>Tidak ada fitur tambahan (basic ERC20)</i>\n\n`;
       await ctx.editMessageText(
-        `🪙 <b>Buat Token ERC20 Baru</b>\n\nToken akan di-deploy langsung di <b>X1 EcoChain Testnet</b> dan didaftarkan ke Constructor.\n\n<b>Langkah 1/4:</b> Ketik <b>nama token</b>\n<i>(contoh: MyToken)</i>`,
+        `🪙 <b>Buat Token ERC20 Baru</b>\n\n${featSummary}<b>Langkah 2/3 — Isi Info Token</b>\n\nKetik <b>nama token</b>:\n<i>(contoh: MyToken, max 50 karakter)</i>`,
         { ...HTML, ...keyboards.cancelTokenCreation }
       );
       break;
@@ -529,6 +550,9 @@ async function handleCallback(ctx) {
       }
       tokenSessions.delete(uid);
       try {
+        const featLabels = keyboards.AVAILABLE_FEATURES
+          .filter(f => (session.features || []).includes(f.key))
+          .map(f => f.label);
         await ctx.editMessageText(
           `⏳ <b>Deploying ${esc(session.symbol)} token...</b>\n\nMengirim transaksi ke X1 EcoChain...\nTunggu 30-60 detik...`,
           HTML
@@ -537,19 +561,25 @@ async function handleCallback(ctx) {
           name: session.name,
           symbol: session.symbol,
           decimals: session.decimals,
-          supply: session.supply
+          supply: session.supply,
+          features: featLabels
         });
         if (result.success) {
+          const verifiedStatus = result.verified ? '✅ <b>Verified</b>' : '⚠️ Tidak terverifikasi';
           let text = `✅ <b>Token Berhasil Dibuat!</b>\n\n`;
           text += `🏷 <b>Nama:</b> ${esc(result.name)}\n`;
           text += `🔤 <b>Symbol:</b> ${esc(result.symbol)}\n`;
           text += `🔢 <b>Decimals:</b> ${result.decimals}\n`;
           text += `💰 <b>Supply:</b> ${parseInt(result.supply).toLocaleString()}\n`;
+          if (featLabels.length > 0) text += `🔧 <b>Fitur:</b> ${esc(featLabels.join(', '))}\n`;
           text += `📍 <b>Address:</b>\n<code>${esc(result.contractAddress)}</code>\n\n`;
+          text += `🔍 <b>Status:</b> ${verifiedStatus}\n\n`;
           text += `📋 <b>Langkah:</b>\n`;
           result.steps.forEach(s => {
-            text += `${s.success ? '✅' : '⚠️'} ${esc(s.step)}\n`;
-            if (s.txHash) text += `   <code>${s.txHash.slice(0, 16)}...</code>\n`;
+            text += `${s.success ? '✅' : '⚠️'} ${esc(s.step)}`;
+            if (s.txHash) text += `\n   <code>${s.txHash.slice(0, 16)}...</code>`;
+            if (!s.success && s.error) text += `\n   <i>${esc(s.error)}</i>`;
+            text += '\n';
           });
           text += `\n🔗 <a href="${esc(result.explorerUrl)}">Lihat di Explorer</a>`;
           await ctx.editMessageText(text, { ...HTML, disable_web_page_preview: true, ...keyboards.backButton });
@@ -563,8 +593,36 @@ async function handleCallback(ctx) {
       break;
     }
 
-    default:
+    default: {
+      // Handle toggle_feature_* dynamically
+      if (action.startsWith('toggle_feature_')) {
+        const featureKey = action.replace('toggle_feature_', '');
+        const uid = ctx.from.id;
+        const session = tokenSessions.get(uid);
+        if (!session || session.step !== 'features') break;
+
+        const validKey = keyboards.AVAILABLE_FEATURES.find(f => f.key === featureKey);
+        if (!validKey) break;
+
+        const idx = session.features.indexOf(featureKey);
+        if (idx === -1) {
+          session.features.push(featureKey);
+        } else {
+          session.features.splice(idx, 1);
+        }
+        tokenSessions.set(uid, session);
+
+        const featureText =
+          `🪙 <b>Buat Token ERC20 Baru</b>\n\n` +
+          `<b>Langkah 1/3 — Pilih Fitur Token:</b>\n\n` +
+          `Centang fitur yang diinginkan, lalu tekan <b>Lanjut</b>.\n` +
+          `<i>ERC20 Token selalu disertakan secara default.</i>`;
+        await ctx.editMessageText(featureText, { ...HTML, ...keyboards.buildFeatureKeyboard(session.features) });
+        break;
+      }
+
       await ctx.editMessageText('❓ Unknown action', { ...HTML, ...keyboards.backButton });
+    }
   }
 }
 
@@ -628,7 +686,7 @@ async function handleTextMessage(ctx) {
       session.step = 'symbol';
       tokenSessions.set(userId, session);
       return ctx.reply(
-        `✅ Nama: <b>${esc(text)}</b>\n\n<b>Langkah 2/4:</b> Ketik <b>simbol token</b>\n<i>(contoh: MTK, max 10 karakter, huruf kapital)</i>`,
+        `✅ Nama: <b>${esc(text)}</b>\n\n<b>Langkah 2/3 (Info Token - 2/4):</b> Ketik <b>simbol token</b>\n<i>(contoh: MTK, max 10 karakter, huruf kapital)</i>`,
         { ...HTML, ...keyboards.cancelTokenCreation }
       );
     }
@@ -642,7 +700,7 @@ async function handleTextMessage(ctx) {
       session.step = 'supply';
       tokenSessions.set(userId, session);
       return ctx.reply(
-        `✅ Symbol: <b>${esc(sym)}</b>\n\n<b>Langkah 3/4:</b> Ketik <b>total supply</b> (jumlah token)\n<i>(contoh: 1000000 untuk 1 juta token)</i>`,
+        `✅ Symbol: <b>${esc(sym)}</b>\n\n<b>Langkah 2/3 (Info Token - 3/4):</b> Ketik <b>total supply</b> (jumlah token)\n<i>(contoh: 1000000000 untuk 1 miliar token)</i>`,
         { ...HTML, ...keyboards.cancelTokenCreation }
       );
     }
@@ -656,7 +714,7 @@ async function handleTextMessage(ctx) {
       session.step = 'decimals';
       tokenSessions.set(userId, session);
       return ctx.reply(
-        `✅ Supply: <b>${supply.toLocaleString()}</b>\n\n<b>Langkah 4/4:</b> Ketik <b>jumlah desimal</b>\n<i>(umumnya 18, ketik 18 atau angka lain antara 0-18)</i>`,
+        `✅ Supply: <b>${supply.toLocaleString()}</b>\n\n<b>Langkah 2/3 (Info Token - 4/4):</b> Ketik <b>jumlah desimal</b>\n<i>(umumnya 18, ketik 18 atau angka lain antara 0-18)</i>`,
         { ...HTML, ...keyboards.cancelTokenCreation }
       );
     }
@@ -670,15 +728,27 @@ async function handleTextMessage(ctx) {
       session.step = 'confirm';
       tokenSessions.set(userId, session);
 
-      const confirmText =
-        `🪙 <b>Konfirmasi Deploy Token</b>\n\n` +
+      const featLabels = keyboards.AVAILABLE_FEATURES
+        .filter(f => (session.features || []).includes(f.key))
+        .map(f => f.label);
+
+      let confirmText =
+        `🪙 <b>Langkah 3/3 — Ringkasan & Konfirmasi</b>\n\n` +
         `🏷 <b>Nama:</b> ${esc(session.name)}\n` +
         `🔤 <b>Symbol:</b> ${esc(session.symbol)}\n` +
         `🔢 <b>Decimals:</b> ${dec}\n` +
-        `💰 <b>Total Supply:</b> ${session.supply.toLocaleString()}\n\n` +
-        `⛓ <b>Network:</b> X1 EcoChain Testnet\n` +
+        `💰 <b>Total Supply:</b> ${session.supply.toLocaleString()}\n`;
+
+      if (featLabels.length > 0) {
+        confirmText += `🔧 <b>Fitur:</b> ERC20 Token, ${featLabels.join(', ')}\n`;
+      } else {
+        confirmText += `🔧 <b>Fitur:</b> ERC20 Token (basic)\n`;
+      }
+
+      confirmText +=
+        `\n⛓ <b>Network:</b> X1 EcoChain Testnet\n` +
         `⛽ <b>Gas:</b> ~0.005 X1T\n\n` +
-        `Konfirmasi deploy?`;
+        `⚠️ <i>Info ini tidak bisa diubah setelah deploy.</i>\n\nKonfirmasi deploy?`;
 
       return ctx.reply(confirmText, { ...HTML, ...keyboards.confirmTokenCreation });
     }

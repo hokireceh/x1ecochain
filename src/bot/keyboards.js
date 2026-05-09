@@ -120,6 +120,30 @@ const confirmTokenCreation = {
   }
 };
 
+// ─── Feature Selection Keyboard (dynamic) ────────────────────────────────────
+const AVAILABLE_FEATURES = [
+  { key: 'pausable',      label: 'Pausable',       desc: 'Token bisa di-pause' },
+  { key: 'burnable',      label: 'Burnable Token',  desc: 'Token bisa dibakar' },
+  { key: 'mintable',      label: 'Mintable',        desc: 'Token bisa dicetak' },
+  { key: 'whitelist',     label: 'Whitelist',       desc: 'Hanya alamat tertentu' },
+  { key: 'taxable',       label: 'Taxable',         desc: 'Ada pajak transaksi' }
+];
+
+function buildFeatureKeyboard(selectedKeys = []) {
+  const rows = AVAILABLE_FEATURES.map(f => {
+    const isOn = selectedKeys.includes(f.key);
+    return [{
+      text: `${isOn ? '✅' : '⬜'} ${f.label}`,
+      callback_data: `toggle_feature_${f.key}`
+    }];
+  });
+  rows.push([
+    { text: '➡️ Lanjut (Isi Info Token)', callback_data: 'features_done' },
+    { text: '❌ Batal', callback_data: 'cancel_token' }
+  ]);
+  return { reply_markup: { inline_keyboard: rows } };
+}
+
 module.exports = {
   mainMenu,
   backButton,
@@ -129,5 +153,7 @@ module.exports = {
   confirmSwap,
   confirmLiquidity,
   cancelTokenCreation,
-  confirmTokenCreation
+  confirmTokenCreation,
+  buildFeatureKeyboard,
+  AVAILABLE_FEATURES
 };
