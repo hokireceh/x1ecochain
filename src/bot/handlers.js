@@ -582,6 +582,9 @@ async function handleCallback(ctx) {
             text += '\n';
           });
           text += `\n🔗 <a href="${esc(result.explorerUrl)}">Lihat di Explorer</a>`;
+          if (result.constructorUrl) {
+            text += `\n🛠 <a href="${esc(result.constructorUrl)}">Kelola Token di Constructor</a>`;
+          }
           await ctx.editMessageText(text, { ...HTML, disable_web_page_preview: true, ...keyboards.backButton });
         } else {
           await ctx.editMessageText(`❌ <b>Deploy Gagal</b>\n\n${safeErr(result.error)}`, { ...HTML, ...keyboards.backButton });
