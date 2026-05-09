@@ -11,6 +11,8 @@ const tokenManager = require('../services/tokenManager');
 const tokenSessions = new Map();
 // mgmtSessions: { step, tokenAddress, tokenName, tokenSymbol, tokenDecimals, mintTo }
 const mgmtSessions = new Map();
+// tokenCache: userId → [{ name, address, features }] — avoids long callback_data
+const tokenCache = new Map();
 
 // ─── HTML helpers ─────────────────────────────────────────────────────────────
 function esc(str) {
@@ -520,6 +522,8 @@ async function handleCallback(ctx) {
         let text = `📜 <b>Token Saya</b>\n\n`;
         const rows = [];
         if (result.success && result.tokens.length > 0) {
+          // Store in cache so manage handler can look up by index (avoid long callback_data)
+          tokenCache.set(userId, result.tokens);
           result.tokens.forEach((t, i) => {
             const shortAddr = `${t.address.slice(0, 8)}...${t.address.slice(-6)}`;
             const featStr = t.features
@@ -528,7 +532,8 @@ async function handleCallback(ctx) {
             text += `${i + 1}. <b>${esc(t.name)}</b>\n`;
             text += `   📍 <code>${esc(shortAddr)}</code>\n`;
             text += `   🔧 <i>${esc(featStr)}</i>\n\n`;
-            rows.push([{ text: `🛠 Kelola: ${t.name}`, callback_data: `token_manage:${t.address}:${encodeURI(t.name)}:${encodeURI(t.features || '')}` }]);
+            // callback_data = "tm:0", "tm:1", etc. — always short
+            rows.push([{ text: `🛠 Kelola: ${t.name}`, callback_data: `tm:${i}` }]);
           });
         } else if (result.success) {
           text += `<i>Belum ada token yang dibuat.</i>\n\nKlik 🪙 Create Token untuk membuat token pertamamu!`;
@@ -610,12 +615,18 @@ async function handleCallback(ctx) {
     }
 
     default: {
-      // ── token_manage:{address}:{name}:{encodedFeatures} ─────────────────
-      if (action.startsWith('token_manage:')) {
-        const parts = action.split(':');
-        const tokenAddress = parts[1];
-        const tokenName    = decodeURIComponent(parts[2] || '');
-        const featuresStr  = decodeURIComponent(parts.slice(3).join(':') || '');
+      // ── tm:{index} — open manage screen (data from tokenCache) ──────────
+      if (action.startsWith('tm:') && !action.startsWith('tm_')) {
+        const idx      = parseInt(action.slice(3));
+        const cached   = tokenCache.get(userId) || [];
+        const token    = cached[idx];
+        if (!token) {
+          await ctx.editMessageText('❌ Sesi habis. Buka 📜 My Tokens lagi.', { ...HTML, ...keyboards.backButton });
+          break;
+        }
+        const tokenAddress = token.address;
+        const tokenName    = token.name;
+        const featuresStr  = token.features || '';
         const features     = tokenManager.parseFeatures(featuresStr);
 
         await ctx.editMessageText('⏳ Memuat info token...', HTML);
