@@ -144,6 +144,57 @@ function buildFeatureKeyboard(selectedKeys = []) {
   return { reply_markup: { inline_keyboard: rows } };
 }
 
+// ─── Token Management Keyboard (dynamic per token features) ──────────────────
+function buildTokenManageKeyboard(tokenAddress, features = {}, info = {}) {
+  const rows = [];
+
+  // Row: Pause / Unpause (only if Pausable feature)
+  if (features.pausable) {
+    const isPaused = info.paused === true;
+    rows.push([
+      isPaused
+        ? { text: '▶️ Unpause Token', callback_data: `tm_unpause:${tokenAddress}` }
+        : { text: '⏸ Pause Token',   callback_data: `tm_pause:${tokenAddress}` }
+    ]);
+  }
+
+  // Row: Mint (only if Mintable)
+  if (features.mintable) {
+    rows.push([{ text: '🪙 Mint Token', callback_data: `tm_mint:${tokenAddress}` }]);
+  }
+
+  // Row: Burn (only if Burnable)
+  if (features.burnable) {
+    rows.push([{ text: '🔥 Burn Token', callback_data: `tm_burn:${tokenAddress}` }]);
+  }
+
+  // Row: Whitelist toggle (only if Whitelist)
+  if (features.whitelist) {
+    const isActive = info.whitelistActive !== false;
+    rows.push([
+      isActive
+        ? { text: '❌ Nonaktifkan Whitelist', callback_data: `tm_wl_off:${tokenAddress}` }
+        : { text: '✅ Aktifkan Whitelist',    callback_data: `tm_wl_on:${tokenAddress}` }
+    ]);
+  }
+
+  // Row: Set Tax Wallet (only if Taxable)
+  if (features.taxable) {
+    rows.push([{ text: '💼 Ganti Tax Wallet', callback_data: `tm_settax:${tokenAddress}` }]);
+  }
+
+  // Row: Explorer + Constructor links
+  rows.push([
+    { text: '🔍 Explorer', url: `https://maculatus-scan.x1eco.com/address/${tokenAddress}` },
+    { text: '🛠 Constructor', url: `https://constructor.x1ecochain.com/ManageToken?contract=${tokenAddress}` }
+  ]);
+
+  // Row: Back to token list
+  rows.push([{ text: '◀️ Kembali ke Daftar Token', callback_data: 'my_tokens' }]);
+
+  return { reply_markup: { inline_keyboard: rows } };
+}
+
 module.exports = {
   mainMenu,
   backButton,
@@ -155,5 +206,6 @@ module.exports = {
   cancelTokenCreation,
   confirmTokenCreation,
   buildFeatureKeyboard,
+  buildTokenManageKeyboard,
   AVAILABLE_FEATURES
 };

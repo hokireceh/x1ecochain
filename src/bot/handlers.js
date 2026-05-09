@@ -5,9 +5,12 @@ const scheduler = require('../services/scheduler');
 const swap = require('../services/swap');
 const liquidity = require('../services/liquidity');
 const tokenCreator = require('../services/tokenCreator');
+const tokenManager = require('../services/tokenManager');
 
-// ─── Conversation State for Token Creation ────────────────────────────────────
+// ─── Conversation State for Token Creation & Management ──────────────────────
 const tokenSessions = new Map();
+// mgmtSessions: { step, tokenAddress, tokenName, tokenSymbol, tokenDecimals, mintTo }
+const mgmtSessions = new Map();
 
 // ─── HTML helpers ─────────────────────────────────────────────────────────────
 function esc(str) {
@@ -515,19 +518,29 @@ async function handleCallback(ctx) {
         await ctx.editMessageText('⏳ Memuat daftar token...', HTML);
         const result = await tokenCreator.getMyTokens();
         let text = `📜 <b>Token Saya</b>\n\n`;
+        const rows = [];
         if (result.success && result.tokens.length > 0) {
           result.tokens.forEach((t, i) => {
+            const shortAddr = `${t.address.slice(0, 8)}...${t.address.slice(-6)}`;
+            const featStr = t.features
+              ? t.features.replace('ERC20 Token, ', '').replace('ERC20 Token', 'Basic ERC20')
+              : 'Basic ERC20';
             text += `${i + 1}. <b>${esc(t.name)}</b>\n`;
-            text += `   📍 <code>${esc(t.address)}</code>\n`;
-            if (t.features) text += `   🔧 ${esc(t.features)}\n`;
-            text += `   🔗 <a href="https://maculatus-scan.x1eco.com/address/${esc(t.address)}">Explorer</a>\n\n`;
+            text += `   📍 <code>${esc(shortAddr)}</code>\n`;
+            text += `   🔧 <i>${esc(featStr)}</i>\n\n`;
+            rows.push([{ text: `🛠 Kelola: ${t.name}`, callback_data: `token_manage:${t.address}:${encodeURI(t.name)}:${encodeURI(t.features || '')}` }]);
           });
         } else if (result.success) {
           text += `<i>Belum ada token yang dibuat.</i>\n\nKlik 🪙 Create Token untuk membuat token pertamamu!`;
         } else {
           text += `❌ ${safeErr(result.error)}`;
         }
-        await ctx.editMessageText(text, { ...HTML, disable_web_page_preview: true, ...keyboards.backButton });
+        rows.push([{ text: '◀️ Back to Menu', callback_data: 'menu' }]);
+        await ctx.editMessageText(text, {
+          ...HTML,
+          disable_web_page_preview: true,
+          reply_markup: { inline_keyboard: rows }
+        });
       } catch (err) {
         await ctx.editMessageText(`❌ Error: ${safeErr(err.message)}`, { ...HTML, ...keyboards.backButton });
       }
@@ -597,7 +610,102 @@ async function handleCallback(ctx) {
     }
 
     default: {
-      // Handle toggle_feature_* dynamically
+      // ── token_manage:{address}:{name}:{encodedFeatures} ─────────────────
+      if (action.startsWith('token_manage:')) {
+        const parts = action.split(':');
+        const tokenAddress = parts[1];
+        const tokenName    = decodeURIComponent(parts[2] || '');
+        const featuresStr  = decodeURIComponent(parts.slice(3).join(':') || '');
+        const features     = tokenManager.parseFeatures(featuresStr);
+
+        await ctx.editMessageText('⏳ Memuat info token...', HTML);
+        const info = await tokenManager.getTokenInfo(tokenAddress);
+
+        let text = `🛠 <b>Kelola Token: ${esc(tokenName)}</b>\n\n`;
+        if (info.success) {
+          text += `🪙 <b>Symbol:</b> ${esc(info.symbol)}  |  🔢 <b>Decimals:</b> ${info.decimals}\n`;
+          text += `💰 <b>Total Supply:</b> ${esc(info.totalSupply)} ${esc(info.symbol)}\n`;
+          text += `👛 <b>Balance Kamu:</b> ${esc(info.balance)} ${esc(info.symbol)}\n`;
+          text += `📍 <code>${esc(tokenAddress)}</code>\n`;
+          if (features.pausable && info.paused !== null) {
+            text += `\n⏸ <b>Status:</b> ${info.paused ? '🔴 Di-pause' : '🟢 Aktif'}`;
+          }
+          if (features.whitelist && info.whitelistActive !== null) {
+            text += `\n🛡 <b>Whitelist:</b> ${info.whitelistActive ? '✅ Aktif' : '❌ Nonaktif'}`;
+          }
+          if (features.taxable && info.taxFeeBps !== null) {
+            text += `\n💸 <b>Tax:</b> ${info.taxFeeBps / 100}%`;
+            if (info.taxWallet) text += `  |  💼 <code>${esc(info.taxWallet.slice(0, 10))}...</code>`;
+          }
+        } else {
+          text += `⚠️ <i>Tidak bisa baca data on-chain: ${safeErr(info.error)}</i>`;
+        }
+        text += `\n\n<b>Pilih aksi:</b>`;
+
+        await ctx.editMessageText(text, {
+          ...HTML,
+          ...keyboards.buildTokenManageKeyboard(tokenAddress, features, info.success ? info : {})
+        });
+        break;
+      }
+
+      // ── No-param actions: tm_pause, tm_unpause, tm_wl_on, tm_wl_off ─────
+      if (action.startsWith('tm_pause:') || action.startsWith('tm_unpause:') ||
+          action.startsWith('tm_wl_on:') || action.startsWith('tm_wl_off:')) {
+        const colonIdx    = action.indexOf(':');
+        const cmd         = action.slice(0, colonIdx);
+        const tokenAddress = action.slice(colonIdx + 1);
+        await ctx.editMessageText('⏳ Mengirim transaksi...', HTML);
+        try {
+          let result, msg;
+          if (cmd === 'tm_pause')   { result = await tokenManager.pauseToken(tokenAddress);          msg = '⏸ Token berhasil di-<b>pause</b>!'; }
+          if (cmd === 'tm_unpause') { result = await tokenManager.unpauseToken(tokenAddress);        msg = '▶️ Token berhasil di-<b>unpause</b>!'; }
+          if (cmd === 'tm_wl_on')   { result = await tokenManager.setWhitelist(tokenAddress, true);  msg = '✅ Whitelist berhasil <b>diaktifkan</b>!'; }
+          if (cmd === 'tm_wl_off')  { result = await tokenManager.setWhitelist(tokenAddress, false); msg = '❌ Whitelist berhasil <b>dinonaktifkan</b>!'; }
+          await ctx.editMessageText(
+            `${msg}\n\n📝 TX: <code>${result.txHash.slice(0, 16)}...</code>\n\n<i>Tekan Kembali untuk refresh status token.</i>`,
+            { ...HTML, reply_markup: { inline_keyboard: [[{ text: '◀️ Kembali ke Daftar Token', callback_data: 'my_tokens' }]] } }
+          );
+        } catch (err) {
+          await ctx.editMessageText(`❌ Gagal: ${safeErr(err.message)}`, { ...HTML, ...keyboards.backButton });
+        }
+        break;
+      }
+
+      // ── Param actions: tm_mint, tm_burn, tm_settax (prompt via text) ─────
+      if (action.startsWith('tm_mint:') || action.startsWith('tm_burn:') || action.startsWith('tm_settax:')) {
+        const colonIdx    = action.indexOf(':');
+        const cmd         = action.slice(0, colonIdx);
+        const tokenAddress = action.slice(colonIdx + 1);
+        const userId      = ctx.from.id;
+
+        const info = await tokenManager.getTokenInfo(tokenAddress);
+        const sym  = info.success ? info.symbol  : '?';
+        const dec  = info.success ? info.decimals : 18;
+
+        if (cmd === 'tm_mint') {
+          mgmtSessions.set(userId, { step: 'mint_address', tokenAddress, tokenSymbol: sym, tokenDecimals: dec });
+          await ctx.editMessageText(
+            `🪙 <b>Mint Token ${esc(sym)}</b>\n\nKetik <b>alamat tujuan</b> yang menerima token:\n<i>Ketik "saya" untuk mint ke wallet kamu sendiri.</i>`,
+            { ...HTML, reply_markup: { inline_keyboard: [[{ text: '❌ Batal', callback_data: 'my_tokens' }]] } }
+          );
+        } else if (cmd === 'tm_burn') {
+          mgmtSessions.set(userId, { step: 'burn_amount', tokenAddress, tokenSymbol: sym, tokenDecimals: dec });
+          await ctx.editMessageText(
+            `🔥 <b>Burn Token ${esc(sym)}</b>\n\nKetik <b>jumlah token</b> yang ingin dibakar:\n<i>(contoh: 1000 — berarti bakar 1.000 ${esc(sym)})</i>`,
+            { ...HTML, reply_markup: { inline_keyboard: [[{ text: '❌ Batal', callback_data: 'my_tokens' }]] } }
+          );
+        } else if (cmd === 'tm_settax') {
+          mgmtSessions.set(userId, { step: 'settax_address', tokenAddress, tokenSymbol: sym, tokenDecimals: dec });
+          await ctx.editMessageText(
+            `💼 <b>Ganti Tax Wallet ${esc(sym)}</b>\n\nKetik <b>alamat wallet baru</b> sebagai penerima pajak transaksi:`,
+            { ...HTML, reply_markup: { inline_keyboard: [[{ text: '❌ Batal', callback_data: 'my_tokens' }]] } }
+          );
+        }
+        break;
+      }
+
+      // ── toggle_feature_* (token creation) ───────────────────────────────
       if (action.startsWith('toggle_feature_')) {
         const featureKey = action.replace('toggle_feature_', '');
         const uid = ctx.from.id;
@@ -669,16 +777,90 @@ async function handleTransfer(ctx) {
   }
 }
 
-// ─── Token creation conversation ──────────────────────────────────────────────
+// ─── Token creation + management conversation ────────────────────────────────
 async function handleTextMessage(ctx) {
   const userId = ctx.from.id;
   if (!isAllowed(userId)) return;
 
-  const session = tokenSessions.get(userId);
-  if (!session) return;
-
   const text = ctx.message.text?.trim();
   if (!text) return;
+
+  // ── Management session (mint / burn / set tax wallet) ─────────────────────
+  const mgmt = mgmtSessions.get(userId);
+  if (mgmt) {
+    const cancelRow = { reply_markup: { inline_keyboard: [[{ text: '❌ Batal', callback_data: 'my_tokens' }]] } };
+    const walletAddr = new (require('ethers').Wallet)(require('../config').x1api.walletPrivateKey).address;
+
+    try {
+      // MINT — step 1: address
+      if (mgmt.step === 'mint_address') {
+        const toAddr = (text.toLowerCase() === 'saya') ? walletAddr : text;
+        if (!/^0x[0-9a-fA-F]{40}$/.test(toAddr)) {
+          return ctx.reply('❌ Alamat tidak valid. Masukkan alamat 0x... yang benar, atau ketik "saya":', cancelRow);
+        }
+        mgmt.mintTo = toAddr;
+        mgmt.step   = 'mint_amount';
+        mgmtSessions.set(userId, mgmt);
+        return ctx.reply(
+          `✅ Tujuan: <code>${esc(toAddr.slice(0, 10))}...</code>\n\nKetik <b>jumlah token</b> yang ingin di-mint:\n<i>(contoh: 1000 — berarti mint 1.000 ${esc(mgmt.tokenSymbol)})</i>`,
+          { ...HTML, ...cancelRow }
+        );
+      }
+
+      // MINT — step 2: amount
+      if (mgmt.step === 'mint_amount') {
+        const amount = parseFloat(text.replace(/[,_]/g, ''));
+        if (isNaN(amount) || amount <= 0) {
+          return ctx.reply('❌ Jumlah tidak valid. Masukkan angka positif:', cancelRow);
+        }
+        mgmtSessions.delete(userId);
+        await ctx.reply(`⏳ Minting ${amount.toLocaleString()} ${esc(mgmt.tokenSymbol)}...`, HTML);
+        const result = await tokenManager.mintTokens(mgmt.tokenAddress, mgmt.mintTo, amount, mgmt.tokenDecimals);
+        return ctx.reply(
+          `✅ <b>Mint berhasil!</b>\n\n🪙 Minted: <b>${amount.toLocaleString()} ${esc(mgmt.tokenSymbol)}</b>\n📤 Ke: <code>${esc(mgmt.mintTo.slice(0, 10))}...</code>\n📝 TX: <code>${result.txHash.slice(0, 16)}...</code>`,
+          { ...HTML, reply_markup: { inline_keyboard: [[{ text: '◀️ Kembali ke Daftar Token', callback_data: 'my_tokens' }]] } }
+        );
+      }
+
+      // BURN — amount
+      if (mgmt.step === 'burn_amount') {
+        const amount = parseFloat(text.replace(/[,_]/g, ''));
+        if (isNaN(amount) || amount <= 0) {
+          return ctx.reply('❌ Jumlah tidak valid. Masukkan angka positif:', cancelRow);
+        }
+        mgmtSessions.delete(userId);
+        await ctx.reply(`⏳ Burning ${amount.toLocaleString()} ${esc(mgmt.tokenSymbol)}...`, HTML);
+        const result = await tokenManager.burnTokens(mgmt.tokenAddress, amount, mgmt.tokenDecimals);
+        return ctx.reply(
+          `✅ <b>Burn berhasil!</b>\n\n🔥 Burned: <b>${amount.toLocaleString()} ${esc(mgmt.tokenSymbol)}</b>\n📝 TX: <code>${result.txHash.slice(0, 16)}...</code>`,
+          { ...HTML, reply_markup: { inline_keyboard: [[{ text: '◀️ Kembali ke Daftar Token', callback_data: 'my_tokens' }]] } }
+        );
+      }
+
+      // SET TAX WALLET — address
+      if (mgmt.step === 'settax_address') {
+        if (!/^0x[0-9a-fA-F]{40}$/.test(text)) {
+          return ctx.reply('❌ Alamat tidak valid. Masukkan alamat 0x... yang benar:', cancelRow);
+        }
+        mgmtSessions.delete(userId);
+        await ctx.reply(`⏳ Mengatur tax wallet baru...`, HTML);
+        const result = await tokenManager.setTaxWallet(mgmt.tokenAddress, text);
+        return ctx.reply(
+          `✅ <b>Tax Wallet berhasil diperbarui!</b>\n\n💼 Wallet Baru: <code>${esc(text)}</code>\n📝 TX: <code>${result.txHash.slice(0, 16)}...</code>`,
+          { ...HTML, reply_markup: { inline_keyboard: [[{ text: '◀️ Kembali ke Daftar Token', callback_data: 'my_tokens' }]] } }
+        );
+      }
+    } catch (err) {
+      mgmtSessions.delete(userId);
+      console.error('Token mgmt error:', err.message);
+      return ctx.reply(`❌ Gagal: ${safeErr(err.message)}`, { ...HTML, ...keyboards.backButton });
+    }
+    return;
+  }
+
+  // ── Token creation session ─────────────────────────────────────────────────
+  const session = tokenSessions.get(userId);
+  if (!session) return;
 
   try {
     if (session.step === 'name') {
