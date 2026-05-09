@@ -15,6 +15,7 @@
     "cloudscraper": "^4.6.0",
     "dotenv": "^17.2.3",
     "ethers": "^6.16.0",
+    "express": "^5.2.1",
     "node-telegram-bot-api": "^0.67.0",
     "solc": "^0.8.35",
     "telegraf": "^4.16.3"
